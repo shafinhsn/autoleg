@@ -2,11 +2,11 @@ import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
-import PageNotFound from './lib/PageNotFound';
+import PageNotFound from './lib/PageNotFound.jsx';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
-import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import UserNotRegisteredError from '@/components/UserNotRegisteredError.jsx';
 import { OfficeProvider, useOffice } from '@/hooks/useOffice';
-import AppLayout from '@/components/layout/AppLayout';
+import AppLayout from '@/components/layout/AppLayout.jsx';
 import OfficeSetup from '@/pages/OfficeSetup';
 import Dashboard from '@/pages/Dashboard';
 import Bills from '@/pages/Bills';
