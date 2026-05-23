@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useOffice } from '@/hooks/useOffice';
-import { Search, Plus, RefreshCw, Upload } from 'lucide-react';
+import { Search, Plus, RefreshCw, Upload, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/use-toast';
@@ -239,6 +239,17 @@ export default function Bills() {
           {uniquePriorities.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <div className="ml-auto flex items-center gap-2">
+          {selectedBills.size > 0 && (
+            <Button variant="destructive" size="sm" onClick={async () => {
+              if (!confirm(`Delete ${selectedBills.size} selected bill(s)?`)) return;
+              for (const id of selectedBills) await base44.entities.Bill.delete(id);
+              setSelectedBills(new Set());
+              qc.invalidateQueries({ queryKey: ['bills'] });
+              toast({ title: `Deleted ${selectedBills.size} bill(s)` });
+            }}>
+              <Trash2 className="w-4 h-4 mr-1.5" /> Delete {selectedBills.size}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
             <RefreshCw className={`w-4 h-4 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
             {syncing ? 'Syncing...' : 'Sync'}
