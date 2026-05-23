@@ -1,0 +1,26 @@
+{
+  "name": "Comment",
+  "type": "object",
+  "properties": {
+    "bill_id": {
+      "type": "string"
+    },
+    "office_id": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    },
+    "author_name": {
+      "type": "string"
+    },
+    "is_internal": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "bill_id",
+    "text"
+  ]
+}

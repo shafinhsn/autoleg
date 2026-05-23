@@ -1,0 +1,115 @@
+{
+  "name": "Bill",
+  "type": "object",
+  "properties": {
+    "office_id": {
+      "type": "string",
+      "description": "ID of the office this bill belongs to"
+    },
+    "bill_number": {
+      "type": "string",
+      "description": "Bill number e.g. A1234 or S5678"
+    },
+    "title": {
+      "type": "string",
+      "description": "Full title of the bill"
+    },
+    "short_name": {
+      "type": "string",
+      "description": "Short name or nickname"
+    },
+    "senate_sponsor": {
+      "type": "string",
+      "description": "Name of the senate sponsor"
+    },
+    "assembly_sponsor": {
+      "type": "string",
+      "description": "Name of the assembly sponsor"
+    },
+    "committee": {
+      "type": "string",
+      "description": "Committee the bill is assigned to"
+    },
+    "latest_status": {
+      "type": "string",
+      "description": "Current status of the bill"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Custom tags/labels like TOP 5, TOP 10, ACTIVE, PASSED"
+    },
+    "section_header": {
+      "type": "string",
+      "description": "Section group this bill belongs to (e.g. TOP 5 PRIORITY)"
+    },
+    "priority_rank": {
+      "type": "string",
+      "description": "Priority ranking"
+    },
+    "pc_contact": {
+      "type": "string",
+      "description": "P&C Contact name"
+    },
+    "next_steps": {
+      "type": "string",
+      "description": "Next steps for the bill"
+    },
+    "session_comments": {
+      "type": "string",
+      "description": "Session comments"
+    },
+    "lobbyist": {
+      "type": "string",
+      "description": "Lobbyist or advocate"
+    },
+    "bill_documents": {
+      "type": "string",
+      "description": "Link to bill documents"
+    },
+    "internal_notes": {
+      "type": "string",
+      "description": "Internal notes"
+    },
+    "staff_assignees": {
+      "type": "string",
+      "description": "Staff assigned to this bill"
+    },
+    "linked_senate_bill": {
+      "type": "string",
+      "description": "Linked senate companion bill"
+    },
+    "google_drive_url": {
+      "type": "string",
+      "description": "Google Drive folder link"
+    },
+    "is_caucus_bill": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this is a caucus bill"
+    },
+    "chamber": {
+      "type": "string",
+      "enum": [
+        "Assembly",
+        "Senate"
+      ],
+      "default": "Assembly"
+    },
+    "session_year": {
+      "type": "number",
+      "default": 2026
+    },
+    "sort_order": {
+      "type": "number",
+      "default": 0,
+      "description": "Sort order within section"
+    }
+  },
+  "required": [
+    "bill_number",
+    "office_id"
+  ]
+}

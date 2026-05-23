@@ -1,0 +1,137 @@
+import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { base44 } from '@/api/base44Client';
+import { useOffice } from '@/hooks/useOffice';
+import { Save, Upload, Key, Palette, Building2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { toast } from '@/components/ui/use-toast';
+
+export default function Settings() {
+  const { office, isAdmin, refetchOffice } = useOffice();
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    name: '',
+    branding_color: '#1e3a5f',
+    news_api_key: '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (office) {
+      setForm({
+        name: office.name || '',
+        branding_color: office.branding_color || '#1e3a5f',
+        news_api_key: office.news_api_key || '',
+      });
+    }
+  }, [office]);
+
+  async function handleSave() {
+    setSaving(true);
+    await base44.entities.Office.update(office.id, form);
+    refetchOffice();
+    setSaving(false);
+    toast({ title: 'Settings saved' });
+  }
+
+  async function handleLogoUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const { file_url } = await base44.integrations.Core.UploadFile({ file });
+    await base44.entities.Office.update(office.id, { logo_url: file_url });
+    refetchOffice();
+    toast({ title: 'Logo updated' });
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Settings</h1>
+        <Card>
+          <CardContent className="py-16 text-center">
+            <p className="text-muted-foreground">Only admins and directors can manage settings.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <h1 className="text-2xl font-bold">Settings</h1>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base"><Building2 className="w-4 h-4" /> Office Details</CardTitle>
+          <CardDescription>Configure your office name and branding</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Office Name</Label>
+            <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+          </div>
+          <div className="space-y-2">
+            <Label>Branding Color</Label>
+            <div className="flex items-center gap-3">
+              <input type="color" value={form.branding_color} onChange={e => setForm(f => ({ ...f, branding_color: e.target.value }))} className="w-10 h-10 rounded-lg border cursor-pointer" />
+              <span className="text-sm text-muted-foreground font-mono">{form.branding_color}</span>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Office Logo</Label>
+            <div className="flex items-center gap-3">
+              {office?.logo_url && <img src={office.logo_url} alt="Logo" className="w-12 h-12 rounded-lg object-cover" />}
+              <label className="cursor-pointer">
+                <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                <span className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
+                  <Upload className="w-4 h-4" /> {office?.logo_url ? 'Change Logo' : 'Upload Logo'}
+                </span>
+              </label>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base"><Key className="w-4 h-4" /> API Keys</CardTitle>
+          <CardDescription>Configure external service API keys</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>News API Key</Label>
+            <Input
+              type="password"
+              value={form.news_api_key}
+              onChange={e => setForm(f => ({ ...f, news_api_key: e.target.value }))}
+              placeholder="Enter your newsapi.org API key"
+            />
+            <p className="text-xs text-muted-foreground">Get a free key at <a href="https://newsapi.org" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">newsapi.org</a>. Used to fetch news about specific bills.</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Invite Code</CardTitle>
+          <CardDescription>Share this code with new team members to join your office</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
+            <p className="font-mono font-bold text-2xl tracking-widest">{office?.invite_code}</p>
+            <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(office?.invite_code || ''); toast({ title: 'Copied!' }); }}>
+              Copy
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Button onClick={handleSave} disabled={saving} className="w-full">
+        <Save className="w-4 h-4 mr-1.5" /> {saving ? 'Saving...' : 'Save Settings'}
+      </Button>
+    </div>
+  );
+}

@@ -1,0 +1,28 @@
+{
+  "name": "User",
+  "type": "object",
+  "properties": {
+    "role": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "legislative_director",
+        "staffer",
+        "intern"
+      ],
+      "default": "staffer"
+    },
+    "office_id": {
+      "type": "string",
+      "description": "ID of the office this user belongs to"
+    },
+    "title": {
+      "type": "string",
+      "description": "Job title"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "Office",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Office name, e.g. Office of Assemblywoman Solages"
+    },
+    "owner_email": {
+      "type": "string",
+      "description": "Email of the admin who created the office"
+    },
+    "invite_code": {
+      "type": "string",
+      "description": "Unique invite code for employees to join"
+    },
+    "branding_color": {
+      "type": "string",
+      "default": "#1e3a5f",
+      "description": "Primary branding color"
+    },
+    "logo_url": {
+      "type": "string",
+      "description": "Office logo URL"
+    },
+    "news_api_key": {
+      "type": "string",
+      "description": "News API key for fetching bill-related news"
+    }
+  },
+  "required": [
+    "name",
+    "owner_email",
+    "invite_code"
+  ]
+}

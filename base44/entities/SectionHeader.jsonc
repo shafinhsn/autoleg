@@ -1,0 +1,28 @@
+{
+  "name": "SectionHeader",
+  "type": "object",
+  "properties": {
+    "office_id": {
+      "type": "string",
+      "description": "ID of the office this section belongs to"
+    },
+    "name": {
+      "type": "string",
+      "description": "Section name e.g. TOP 5 PRIORITY, TOP 10 PRIORITY"
+    },
+    "color": {
+      "type": "string",
+      "default": "#1e40af",
+      "description": "Section header color"
+    },
+    "sort_order": {
+      "type": "number",
+      "default": 0,
+      "description": "Display order"
+    }
+  },
+  "required": [
+    "office_id",
+    "name"
+  ]
+}
