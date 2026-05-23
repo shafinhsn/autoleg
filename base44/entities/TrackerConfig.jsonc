@@ -1,0 +1,41 @@
+{
+  "name": "TrackerConfig",
+  "type": "object",
+  "properties": {
+    "office_id": {
+      "type": "string",
+      "description": "ID of the office this config belongs to"
+    },
+    "config_type": {
+      "type": "string",
+      "enum": [
+        "priority_tags",
+        "bill_statuses",
+        "committees"
+      ],
+      "description": "Type of configuration"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string"
+          },
+          "sort_order": {
+            "type": "number"
+          }
+        }
+      },
+      "description": "List of configured items"
+    }
+  },
+  "required": [
+    "office_id",
+    "config_type"
+  ]
+}

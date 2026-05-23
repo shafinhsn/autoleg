@@ -1,25 +1,28 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useOffice } from '@/hooks/useOffice';
-import { Search, Plus, RefreshCw, ArrowUpDown } from 'lucide-react';
+import { Search, Plus, RefreshCw, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/use-toast';
 import SectionHeaderBar from '@/components/bills/SectionHeaderBar';
-import BillRow from '@/components/bills/BillRow';
+import BillRow from '@/components/bills/BillRow.jsx';
 import { getSectionColor } from '@/lib/bill-utils';
+import { Link } from 'react-router-dom';
 
 export default function Bills() {
   const { office, isAdmin } = useOffice();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [filterSection, setFilterSection] = useState('');
+  const [filterCommittee, setFilterCommittee] = useState('');
+  const [filterPriority, setFilterPriority] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [newBillNumber, setNewBillNumber] = useState('');
   const [expandedSections, setExpandedSections] = useState(new Set());
   const [syncing, setSyncing] = useState(false);
+  const [selectedBills, setSelectedBills] = useState(new Set());
 
   const { data: bills = [], isLoading } = useQuery({
     queryKey: ['bills', office?.id],
@@ -33,12 +36,23 @@ export default function Bills() {
     enabled: !!office?.id,
   });
 
-  // Initialize all sections as expanded
-  useState(() => {
-    if (sections.length > 0) {
+  const { data: priorityConfigs = [] } = useQuery({
+    queryKey: ['tracker-config', office?.id, 'priority_tags'],
+    queryFn: () => base44.entities.TrackerConfig.filter({ office_id: office?.id, config_type: 'priority_tags' }),
+    enabled: !!office?.id,
+  });
+
+  const { data: statusConfigs = [] } = useQuery({
+    queryKey: ['tracker-config', office?.id, 'bill_statuses'],
+    queryFn: () => base44.entities.TrackerConfig.filter({ office_id: office?.id, config_type: 'bill_statuses' }),
+    enabled: !!office?.id,
+  });
+
+  useEffect(() => {
+    if (sections.length > 0 && expandedSections.size === 0) {
       setExpandedSections(new Set(sections.map(s => s.id)));
     }
-  });
+  }, [sections]);
 
   function toggleSection(id) {
     setExpandedSections(prev => {
@@ -48,17 +62,16 @@ export default function Bills() {
     });
   }
 
-  // Filter bills
   const filtered = bills.filter(b => {
     if (search && !b.bill_number?.toLowerCase().includes(search.toLowerCase()) &&
         !b.title?.toLowerCase().includes(search.toLowerCase()) &&
         !b.short_name?.toLowerCase().includes(search.toLowerCase())) return false;
     if (filterStatus && b.latest_status !== filterStatus) return false;
-    if (filterSection && b.section_header !== filterSection) return false;
+    if (filterCommittee && b.committee !== filterCommittee) return false;
+    if (filterPriority && !(b.tags || []).includes(filterPriority)) return false;
     return true;
   });
 
-  // Group by section
   const sortedSections = [...sections].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const sectionedBills = sortedSections.map(s => ({
     section: s,
@@ -66,7 +79,10 @@ export default function Bills() {
   }));
   const unsectionedBills = filtered.filter(b => !b.section_header || !sections.find(s => s.name === b.section_header));
 
-  const uniqueStatuses = [...new Set(bills.map(b => b.latest_status).filter(Boolean))];
+  const uniqueStatuses = [...new Set(bills.map(b => b.latest_status).filter(Boolean))].sort();
+  const uniqueCommittees = [...new Set(bills.map(b => b.committee).filter(Boolean))].sort();
+  const uniquePriorities = priorityConfigs[0]?.items?.map(i => i.label) ||
+    [...new Set(bills.flatMap(b => b.tags || []).filter(Boolean))];
 
   async function handleAddBill() {
     if (!newBillNumber.trim()) return;
@@ -99,51 +115,29 @@ export default function Bills() {
     setSyncing(true);
     let updated = 0;
     for (const bill of bills) {
-      const num = bill.bill_number?.replace(/[^0-9]/g, '');
-      const prefix = bill.bill_number?.charAt(0).toUpperCase();
-      if (!num) continue;
-
-      const sessionYear = bill.session_year || 2026;
-      const url = `https://legislation.nysenate.gov/api/3/bills/${sessionYear}/${bill.bill_number}?key=tSBEMOLz2kk1HVzenAxZGy64XAMOBJmx`;
-
+      const url = `https://legislation.nysenate.gov/api/3/bills/${bill.session_year || 2026}/${bill.bill_number}?key=tSBEMOLz2kk1HVzenAxZGy64XAMOBJmx`;
       try {
         const resp = await fetch(url);
         if (!resp.ok) continue;
         const data = await resp.json();
         const result = data?.result;
         if (!result) continue;
-
         const updateData = {};
-        // Extract sponsor name - the key fix
         const sponsor = result.sponsor?.member;
         if (sponsor) {
-          const sponsorName = sponsor.fullName || sponsor.shortName || `${sponsor.firstName || ''} ${sponsor.lastName || ''}`.trim();
-          if (sponsorName) {
-            updateData.senate_sponsor = sponsorName;
-          }
+          const name = sponsor.fullName || sponsor.shortName || `${sponsor.firstName || ''} ${sponsor.lastName || ''}`.trim();
+          if (name) updateData.senate_sponsor = name;
         }
-
         if (result.title) updateData.title = result.title;
         if (result.status?.statusDesc) updateData.latest_status = result.status.statusDesc;
         if (result.status?.committeeName) updateData.committee = result.status.committeeName;
-
-        // Check for same-as bill (companion)
         const sameAs = result.amendments?.items;
         if (sameAs) {
-          const latestAmendment = Object.values(sameAs).pop();
-          if (latestAmendment?.sameAs?.items?.[0]) {
-            const companion = latestAmendment.sameAs.items[0];
-            updateData.linked_senate_bill = `${companion.basePrintNo}`;
-          }
+          const latest = Object.values(sameAs).pop();
+          if (latest?.sameAs?.items?.[0]) updateData.linked_senate_bill = latest.sameAs.items[0].basePrintNo;
         }
-
-        if (Object.keys(updateData).length > 0) {
-          await base44.entities.Bill.update(bill.id, updateData);
-          updated++;
-        }
-      } catch (e) {
-        console.log(`Sync failed for ${bill.bill_number}`, e);
-      }
+        if (Object.keys(updateData).length > 0) { await base44.entities.Bill.update(bill.id, updateData); updated++; }
+      } catch (e) {}
     }
     qc.invalidateQueries({ queryKey: ['bills'] });
     setSyncing(false);
@@ -156,7 +150,7 @@ export default function Bills() {
   }
 
   async function handleDeleteSection(id) {
-    if (!confirm('Delete this section header? Bills will keep their data.')) return;
+    if (!confirm('Delete this section header?')) return;
     await base44.entities.SectionHeader.delete(id);
     qc.invalidateQueries({ queryKey: ['sections'] });
   }
@@ -173,11 +167,25 @@ export default function Bills() {
     qc.invalidateQueries({ queryKey: ['sections'] });
   }
 
+  function toggleSelectAll(billsList) {
+    const allSelected = billsList.every(b => selectedBills.has(b.id));
+    setSelectedBills(prev => {
+      const next = new Set(prev);
+      billsList.forEach(b => allSelected ? next.delete(b.id) : next.add(b.id));
+      return next;
+    });
+  }
+
   const BillTable = ({ bills: tableBills }) => (
     <div className="overflow-x-auto">
       <table className="w-full text-left">
         <thead>
           <tr className="border-b border-border text-[11px] text-muted-foreground uppercase tracking-wider">
+            <th className="py-2 px-3 w-8">
+              <input type="checkbox"
+                checked={tableBills.length > 0 && tableBills.every(b => selectedBills.has(b.id))}
+                onChange={() => toggleSelectAll(tableBills)} className="rounded" />
+            </th>
             <th className="py-2 px-3 font-medium">Bill No.</th>
             <th className="py-2 px-3 font-medium">Short Name</th>
             <th className="py-2 px-3 font-medium">Title</th>
@@ -185,14 +193,24 @@ export default function Bills() {
             <th className="py-2 px-3 font-medium">Committee</th>
             <th className="py-2 px-3 font-medium">Status</th>
             <th className="py-2 px-3 font-medium">Priority</th>
-            <th className="py-2 px-3 font-medium">P&C Contact</th>
+            <th className="py-2 px-3 font-medium">P&amp;C Contact</th>
             <th className="py-2 px-3 font-medium">Drive</th>
             <th className="py-2 px-3 w-10"></th>
           </tr>
         </thead>
         <tbody>
           {tableBills.map(bill => (
-            <BillRow key={bill.id} bill={bill} onUpdate={handleUpdateBill} onDelete={handleDeleteBill} isAdmin={isAdmin} />
+            <BillRow
+              key={bill.id}
+              bill={bill}
+              onUpdate={handleUpdateBill}
+              onDelete={handleDeleteBill}
+              isAdmin={isAdmin}
+              selected={selectedBills.has(bill.id)}
+              onToggleSelect={() => setSelectedBills(prev => { const n = new Set(prev); n.has(bill.id) ? n.delete(bill.id) : n.add(bill.id); return n; })}
+              priorityItems={priorityConfigs[0]?.items}
+              statusItems={statusConfigs[0]?.items}
+            />
           ))}
         </tbody>
       </table>
@@ -200,13 +218,33 @@ export default function Bills() {
   );
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Bills Tracker</h1>
-        <div className="flex items-center gap-2">
+    <div className="space-y-3">
+      <h1 className="text-2xl font-bold">Bill Tracker</h1>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-9 text-sm w-36" />
+        </div>
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="text-sm border rounded-md px-2.5 py-2 bg-background h-9">
+          <option value="">All Statuses</option>
+          {uniqueStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select value={filterCommittee} onChange={e => setFilterCommittee(e.target.value)} className="text-sm border rounded-md px-2.5 py-2 bg-background h-9">
+          <option value="">All Committees</option>
+          {uniqueCommittees.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)} className="text-sm border rounded-md px-2.5 py-2 bg-background h-9">
+          <option value="">All Priorities</option>
+          {uniquePriorities.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <div className="ml-auto flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
             <RefreshCw className={`w-4 h-4 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
             {syncing ? 'Syncing...' : 'Sync'}
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/import"><Upload className="w-4 h-4 mr-1.5" /> Import</Link>
           </Button>
           {isAdmin && (
             <Button variant="outline" size="sm" onClick={addSection}>
@@ -219,43 +257,17 @@ export default function Bills() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search bills..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-8 h-9 text-sm"
-          />
-        </div>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="text-sm border rounded-md px-2.5 py-2 bg-background">
-          <option value="">All Statuses</option>
-          {uniqueStatuses.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select value={filterSection} onChange={e => setFilterSection(e.target.value)} className="text-sm border rounded-md px-2.5 py-2 bg-background">
-          <option value="">All Sections</option>
-          {sections.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-        </select>
-      </div>
-
-      {/* Add Bill Form */}
       {showAddForm && (
         <div className="flex items-center gap-3 p-4 bg-card rounded-lg border">
-          <Input
-            placeholder="Bill number (e.g. A1234)"
-            value={newBillNumber}
+          <Input placeholder="Bill number (e.g. A1234)" value={newBillNumber}
             onChange={e => setNewBillNumber(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleAddBill(); }}
-            className="max-w-xs text-sm"
-          />
+            className="max-w-xs text-sm" autoFocus />
           <Button size="sm" onClick={handleAddBill}>Add</Button>
           <Button size="sm" variant="ghost" onClick={() => setShowAddForm(false)}>Cancel</Button>
         </div>
       )}
 
-      {/* Bills Grid with Sections */}
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
           <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" />
@@ -265,23 +277,17 @@ export default function Bills() {
           {sectionedBills.map(({ section, bills: sectionBills }) => (
             <div key={section.id} className="bg-card rounded-xl border overflow-hidden">
               <SectionHeaderBar
-                section={section}
-                billCount={sectionBills.length}
-                expanded={expandedSections.has(section.id) || expandedSections.size === 0}
+                section={section} billCount={sectionBills.length}
+                expanded={expandedSections.has(section.id)}
                 onToggle={() => toggleSection(section.id)}
-                onUpdate={handleUpdateSection}
-                onDelete={handleDeleteSection}
-                isAdmin={isAdmin}
+                onUpdate={handleUpdateSection} onDelete={handleDeleteSection} isAdmin={isAdmin}
               />
-              {(expandedSections.has(section.id) || expandedSections.size === 0) && sectionBills.length > 0 && (
-                <BillTable bills={sectionBills} />
-              )}
-              {(expandedSections.has(section.id) || expandedSections.size === 0) && sectionBills.length === 0 && (
+              {expandedSections.has(section.id) && sectionBills.length > 0 && <BillTable bills={sectionBills} />}
+              {expandedSections.has(section.id) && sectionBills.length === 0 && (
                 <p className="text-sm text-muted-foreground py-4 px-4 text-center">No bills in this section</p>
               )}
             </div>
           ))}
-
           {unsectionedBills.length > 0 && (
             <div className="bg-card rounded-xl border overflow-hidden">
               <div className="flex items-center gap-3 px-4 py-3 bg-muted/50 font-semibold text-sm border-b">
@@ -291,12 +297,16 @@ export default function Bills() {
               <BillTable bills={unsectionedBills} />
             </div>
           )}
-
           {filtered.length === 0 && (
-            <div className="text-center py-16 text-muted-foreground">
-              <p>No bills found. Add a bill or import a CSV to get started.</p>
-            </div>
+            <div className="text-center py-16 text-muted-foreground">No bills found. Add a bill or import a CSV.</div>
           )}
+        </div>
+      )}
+
+      {filtered.length > 0 && (
+        <div className="text-xs text-muted-foreground px-1 py-2 flex items-center justify-between">
+          <span>{filtered.length} bill{filtered.length !== 1 ? 's' : ''}</span>
+          <span className="hidden md:block">Click colored badge to change · Click text cell to edit · Click bill number for full detail</span>
         </div>
       )}
     </div>

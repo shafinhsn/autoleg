@@ -8,14 +8,15 @@ import UserNotRegisteredError from '@/components/UserNotRegisteredError.jsx';
 import { OfficeProvider, useOffice } from '@/hooks/useOffice';
 import AppLayout from '@/components/layout/AppLayout.jsx';
 import OfficeSetup from '@/pages/OfficeSetup';
-import Dashboard from '@/pages/Dashboard';
-import Bills from '@/pages/Bills';
+import Dashboard from '@/pages/Dashboard.jsx';
+import Bills from '@/pages/Bills.jsx';
 import BillDetail from '@/pages/BillDetail';
-import ImportCsv from '@/pages/ImportCsv';
+import ImportCsv from '@/pages/ImportCsv.jsx';
 import StaffDirectory from '@/pages/StaffDirectory';
 import Tasks from '@/pages/Tasks';
 import TeamChat from '@/pages/TeamChat';
 import Settings from '@/pages/Settings';
+import Customize from '@/pages/Customize';
 
 const OfficeApp = () => {
   const { needsSetup, loading } = useOffice();
@@ -43,6 +44,7 @@ const OfficeApp = () => {
         <Route path="/tasks" element={<Tasks />} />
         <Route path="/chat" element={<TeamChat />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/customize" element={<Customize />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>

@@ -1,92 +1,182 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useOffice } from '@/hooks/useOffice';
-import { FileText, Users, ListTodo, TrendingUp, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { FileText, CheckCircle2, Star, Building2, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
-function StatCard({ title, value, icon: Icon, color, to }) {
-  const Wrapper = to ? Link : 'div';
+const STATUS_COLORS = [
+  '#3b82f6','#f97316','#10b981','#8b5cf6','#f59e0b',
+  '#06b6d4','#ec4899','#84cc16','#6366f1','#ef4444',
+];
+
+function StatCard({ title, value, icon: Icon, iconColor }) {
   return (
-    <Wrapper to={to} className="block">
-      <Card className="hover:shadow-md transition-shadow cursor-pointer">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground font-medium">{title}</p>
-              <p className="text-3xl font-bold mt-1">{value}</p>
-            </div>
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${color}`}>
-              <Icon className="w-6 h-6" />
-            </div>
+    <Card>
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-muted-foreground font-medium">{title}</p>
+            <p className="text-4xl font-bold mt-1">{value}</p>
           </div>
-        </CardContent>
-      </Card>
-    </Wrapper>
+          <Icon className={`w-6 h-6 ${iconColor}`} />
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
 export default function Dashboard() {
   const { office } = useOffice();
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState(null);
 
-  const { data: bills = [] } = useQuery({
+  const { data: bills = [], refetch } = useQuery({
     queryKey: ['bills', office?.id],
     queryFn: () => base44.entities.Bill.filter({ office_id: office?.id }),
     enabled: !!office?.id,
   });
 
-  const { data: tasks = [] } = useQuery({
-    queryKey: ['tasks', office?.id],
-    queryFn: () => base44.entities.Task.filter({ office_id: office?.id }),
-    enabled: !!office?.id,
-  });
+  const inCommittee = bills.filter(b => b.latest_status?.toLowerCase().includes('committee')).length;
+  const passed = bills.filter(b =>
+    b.latest_status?.toLowerCase().includes('passed') || b.latest_status?.toLowerCase().includes('signed')
+  ).length;
+  const priorityBills = bills.filter(b => b.tags?.length > 0).length;
 
-  const { data: staff = [] } = useQuery({
-    queryKey: ['staff', office?.id],
-    queryFn: () => base44.entities.User.filter({ office_id: office?.id }),
-    enabled: !!office?.id,
-  });
+  const committeeMap = {};
+  bills.forEach(b => { if (b.committee) committeeMap[b.committee] = (committeeMap[b.committee] || 0) + 1; });
+  const committeeData = Object.entries(committeeMap).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([name, count]) => ({ name, count }));
 
-  const activeBills = bills.filter(b => b.latest_status !== 'Signed into Law' && b.latest_status !== 'Vetoed');
-  const pendingTasks = tasks.filter(t => t.status !== 'completed');
+  const statusMap = {};
+  bills.forEach(b => { const s = b.latest_status || 'Unknown'; statusMap[s] = (statusMap[s] || 0) + 1; });
+  const statusData = Object.entries(statusMap).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value }));
+
   const recentBills = [...bills].sort((a, b) => new Date(b.updated_date) - new Date(a.updated_date)).slice(0, 8);
 
+  async function handleSyncAll() {
+    setSyncing(true);
+    let updated = 0;
+    for (const bill of bills) {
+      const url = `https://legislation.nysenate.gov/api/3/bills/${bill.session_year || 2026}/${bill.bill_number}?key=tSBEMOLz2kk1HVzenAxZGy64XAMOBJmx`;
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) continue;
+        const data = await resp.json();
+        const result = data?.result;
+        if (!result) continue;
+        const updateData = {};
+        const sponsor = result.sponsor?.member;
+        if (sponsor) {
+          const name = sponsor.fullName || sponsor.shortName || `${sponsor.firstName || ''} ${sponsor.lastName || ''}`.trim();
+          if (name) updateData.senate_sponsor = name;
+        }
+        if (result.title) updateData.title = result.title;
+        if (result.status?.statusDesc) updateData.latest_status = result.status.statusDesc;
+        if (result.status?.committeeName) updateData.committee = result.status.committeeName;
+        if (Object.keys(updateData).length > 0) { await base44.entities.Bill.update(bill.id, updateData); updated++; }
+      } catch (e) {}
+    }
+    setSyncing(false);
+    setLastSync(new Date());
+    refetch();
+  }
+
+  const syncLabel = lastSync
+    ? `Last synced ${Math.round((Date.now() - lastSync.getTime()) / 60000)}m ago`
+    : `${bills.length} bills loaded`;
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">{office?.name}</p>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{syncLabel}</p>
+        </div>
+        <Button onClick={handleSyncAll} disabled={syncing}>
+          <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
+          {syncing ? 'Syncing...' : 'Sync All'}
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Total Bills" value={bills.length} icon={FileText} color="bg-primary/10 text-primary" to="/bills" />
-        <StatCard title="Active Bills" value={activeBills.length} icon={TrendingUp} color="bg-green-100 text-green-700" to="/bills" />
-        <StatCard title="Pending Tasks" value={pendingTasks.length} icon={AlertCircle} color="bg-amber-100 text-amber-700" to="/tasks" />
-        <StatCard title="Staff Members" value={staff.length} icon={Users} color="bg-blue-100 text-blue-700" to="/staff" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard title="Total Bills" value={bills.length} icon={FileText} iconColor="text-blue-500" />
+        <StatCard title="In Committee" value={inCommittee} icon={Building2} iconColor="text-blue-400" />
+        <StatCard title="Passed" value={passed} icon={CheckCircle2} iconColor="text-green-500" />
+        <StatCard title="Priority Bills" value={priorityBills} icon={Star} iconColor="text-yellow-500" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-base">Bills by Committee</CardTitle></CardHeader>
+          <CardContent>
+            {committeeData.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No committee data yet</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={committeeData} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
+                  <XAxis type="number" tick={{ fontSize: 11 }} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={120} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-base">Bills by Status</CardTitle></CardHeader>
+          <CardContent>
+            {statusData.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No status data yet</p>
+            ) : (
+              <div className="flex gap-4 items-center">
+                <ResponsiveContainer width="50%" height={220}>
+                  <PieChart>
+                    <Pie data={statusData} cx="50%" cy="50%" innerRadius={55} outerRadius={90} dataKey="value">
+                      {statusData.map((_, i) => <Cell key={i} fill={STATUS_COLORS[i % STATUS_COLORS.length]} />)}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex-1 space-y-1.5">
+                  {statusData.slice(0, 7).map((s, i) => (
+                    <div key={s.name} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: STATUS_COLORS[i % STATUS_COLORS.length] }} />
+                        <span className="truncate text-muted-foreground">{s.name}</span>
+                      </div>
+                      <span className="font-medium ml-2 flex-shrink-0">{s.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Recently Updated Bills</CardTitle>
+        <CardHeader className="pb-2 flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Recent Changes</CardTitle>
+          <Link to="/bills" className="text-sm text-primary hover:underline">View all bills</Link>
         </CardHeader>
         <CardContent>
           {recentBills.length === 0 ? (
             <p className="text-muted-foreground text-sm py-4 text-center">No bills yet. Import a CSV or add bills manually.</p>
           ) : (
-            <div className="space-y-2">
+            <div className="divide-y divide-border">
               {recentBills.map(bill => (
-                <Link key={bill.id} to={`/bills/${bill.id}`} className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-sm font-semibold text-primary">{bill.bill_number}</span>
-                    <span className="text-sm text-foreground truncate max-w-md">{bill.short_name || bill.title || 'Untitled'}</span>
+                <Link key={bill.id} to={`/bills/${bill.id}`} className="flex items-center justify-between py-2.5 hover:bg-muted/30 px-2 -mx-2 rounded transition-colors">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="font-mono text-sm font-semibold text-primary flex-shrink-0">{bill.bill_number}</span>
+                    <span className="text-sm truncate">{bill.short_name || bill.title || 'Untitled'}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {bill.tags?.length > 0 && (
-                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
-                        {bill.tags[0]}
-                      </span>
-                    )}
-                    <span className="text-[11px] text-muted-foreground">{bill.latest_status || 'No status'}</span>
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                    {bill.tags?.length > 0 && <span className="text-[11px] px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">{bill.tags[0]}</span>}
+                    {bill.latest_status && <span className="text-[11px] text-muted-foreground">{bill.latest_status}</span>}
                   </div>
                 </Link>
               ))}
