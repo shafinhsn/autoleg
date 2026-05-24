@@ -25,7 +25,11 @@
     },
     "news_api_key": {
       "type": "string",
-      "description": "News API key for fetching bill-related news"
+      "description": "News API key"
+    },
+    "senate_api_key": {
+      "type": "string",
+      "description": "NY Senate Open Legislation API key"
     }
   },
   "required": [

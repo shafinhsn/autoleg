@@ -28,10 +28,11 @@ export function OfficeProvider({ children }) {
   const value = {
     user,
     office,
-    loading: loading || officeLoading,
+    loading: loading || (!!user?.office_id && officeLoading),
     refetchOffice,
     isAdmin: user?.role === 'admin' || user?.role === 'legislative_director',
-    needsSetup: !loading && user && !user.office_id,
+    isStaff: user?.role === 'user' || user?.role === 'staffer',
+    needsSetup: !loading && !!user && !user.office_id,
   };
 
   return (

@@ -17,6 +17,8 @@ import Tasks from '@/pages/Tasks';
 import TeamChat from '@/pages/TeamChat';
 import Settings from '@/pages/Settings';
 import Customize from '@/pages/Customize';
+import Assignments from '@/pages/Assignments';
+import CalendarPage from '@/pages/CalendarPage';
 
 const OfficeApp = () => {
   const { needsSetup, loading } = useOffice();
@@ -45,6 +47,8 @@ const OfficeApp = () => {
         <Route path="/chat" element={<TeamChat />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/customize" element={<Customize />} />
+        <Route path="/assignments" element={<Assignments />} />
+        <Route path="/calendar" element={<CalendarPage />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>

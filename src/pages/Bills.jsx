@@ -100,6 +100,26 @@ export default function Bills() {
   }
 
   async function handleUpdateBill(id, data) {
+    // If tags changed, auto-assign section_header and ensure section exists
+    if (data.tags !== undefined) {
+      const firstTag = Array.isArray(data.tags) ? data.tags[0] : data.tags;
+      if (firstTag) {
+        data.section_header = firstTag;
+        // Create section header if it doesn't exist
+        const existingSection = sections.find(s => s.name === firstTag);
+        if (!existingSection) {
+          await base44.entities.SectionHeader.create({
+            office_id: office.id,
+            name: firstTag,
+            color: getSectionColor(firstTag),
+            sort_order: sections.length,
+          });
+          qc.invalidateQueries({ queryKey: ['sections'] });
+        }
+      } else {
+        data.section_header = '';
+      }
+    }
     await base44.entities.Bill.update(id, data);
     qc.invalidateQueries({ queryKey: ['bills'] });
   }
@@ -112,10 +132,18 @@ export default function Bills() {
   }
 
   async function handleSync() {
+    if (bills.length === 0) {
+      toast({ title: 'No bills to sync. Add bills first.' });
+      return;
+    }
     setSyncing(true);
     let updated = 0;
+    const apiKey = office?.senate_api_key || 'tSBEMOLz2kk1HVzenAxZGy64XAMOBJmx';
     for (const bill of bills) {
-      const url = `https://legislation.nysenate.gov/api/3/bills/${bill.session_year || 2026}/${bill.bill_number}?key=tSBEMOLz2kk1HVzenAxZGy64XAMOBJmx`;
+      const billNum = bill.bill_number?.trim().toUpperCase();
+      if (!billNum) continue;
+      const year = bill.session_year || 2026;
+      const url = `https://legislation.nysenate.gov/api/3/bills/${year}/${billNum}?key=${apiKey}&view=with_refs`;
       try {
         const resp = await fetch(url);
         if (!resp.ok) continue;
@@ -123,25 +151,68 @@ export default function Bills() {
         const result = data?.result;
         if (!result) continue;
         const updateData = {};
-        const sponsor = result.sponsor?.member;
-        if (sponsor) {
-          const name = sponsor.fullName || sponsor.shortName || `${sponsor.firstName || ''} ${sponsor.lastName || ''}`.trim();
-          if (name) updateData.senate_sponsor = name;
-        }
+
+        // Title
         if (result.title) updateData.title = result.title;
+
+        // Primary sponsor — correctly extract from primarySponsor or sponsor
+        const primarySponsor = result.sponsor?.member || result.primarySponsor?.member;
+        if (primarySponsor) {
+          const firstName = primarySponsor.firstName || '';
+          const lastName = primarySponsor.lastName || '';
+          const fullName = primarySponsor.fullName || `${firstName} ${lastName}`.trim();
+          if (fullName) {
+            if (billNum.startsWith('S')) {
+              updateData.senate_sponsor = fullName;
+            } else {
+              updateData.assembly_sponsor = fullName;
+              // Also set senate sponsor if there's a same-as
+            }
+          }
+        }
+
+        // Status
         if (result.status?.statusDesc) updateData.latest_status = result.status.statusDesc;
         if (result.status?.committeeName) updateData.committee = result.status.committeeName;
-        const sameAs = result.amendments?.items;
-        if (sameAs) {
-          const latest = Object.values(sameAs).pop();
-          if (latest?.sameAs?.items?.[0]) updateData.linked_senate_bill = latest.sameAs.items[0].basePrintNo;
+
+        // Same-as / companion bill
+        const amendments = result.amendments?.items;
+        if (amendments) {
+          const latestAmend = Object.values(amendments).pop();
+          const sameAs = latestAmend?.sameAs?.items;
+          if (sameAs && sameAs.length > 0) {
+            updateData.linked_senate_bill = sameAs[0].basePrintNo;
+            // Try to get senate sponsor from the companion
+          }
+          // Assembly sponsor from co-sponsors
+          if (!updateData.assembly_sponsor && latestAmend?.coSponsors?.items?.length > 0) {
+            const co = latestAmend.coSponsors.items[0];
+            if (co.fullName || co.lastName) {
+              updateData.assembly_sponsor = co.fullName || `${co.firstName || ''} ${co.lastName}`.trim();
+            }
+          }
         }
-        if (Object.keys(updateData).length > 0) { await base44.entities.Bill.update(bill.id, updateData); updated++; }
-      } catch (e) {}
+
+        // Hearing date from actions
+        const actions = result.actions?.items || [];
+        const hearingAction = actions.find(a =>
+          /hearing|committee|floor/i.test(a.text || '')
+        );
+        if (hearingAction?.date) {
+          updateData.hearing_date = hearingAction.date.split('T')[0];
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          await base44.entities.Bill.update(bill.id, updateData);
+          updated++;
+        }
+      } catch (e) {
+        console.error(`Failed to sync ${bill.bill_number}:`, e);
+      }
     }
     qc.invalidateQueries({ queryKey: ['bills'] });
     setSyncing(false);
-    toast({ title: `Synced — ${updated} bill${updated !== 1 ? 's' : ''} updated` });
+    toast({ title: `Synced — ${updated} of ${bills.length} bill${bills.length !== 1 ? 's' : ''} updated` });
   }
 
   async function handleUpdateSection(id, data) {

@@ -1,16 +1,20 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useOffice } from '@/hooks/useOffice';
 import {
-  LayoutDashboard, FileText, Upload, Users, LogOut, Building2, Sliders
+  LayoutDashboard, FileText, Upload, Users, LogOut, Building2,
+  Sliders, ClipboardList, Calendar, Settings
 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/bills', label: 'Bill Tracker', icon: FileText },
+  { path: '/assignments', label: 'Assignments', icon: ClipboardList },
+  { path: '/calendar', label: 'Calendar', icon: Calendar },
   { path: '/staff', label: 'Staff Directory', icon: Users },
   { path: '/import', label: 'Import CSV', icon: Upload },
   { path: '/customize', label: 'Customize', icon: Sliders },
+  { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export default function Sidebar() {
@@ -22,9 +26,13 @@ export default function Sidebar() {
       {/* Office Branding */}
       <div className="p-5 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-sidebar-primary flex items-center justify-center">
-            <Building2 className="w-5 h-5 text-sidebar-primary-foreground" />
-          </div>
+          {office?.logo_url ? (
+            <img src={office.logo_url} alt="Logo" className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
+          ) : (
+            <div className="w-9 h-9 rounded-lg bg-sidebar-primary flex items-center justify-center flex-shrink-0">
+              <Building2 className="w-5 h-5 text-sidebar-primary-foreground" />
+            </div>
+          )}
           <div className="min-w-0">
             <p className="text-xs text-sidebar-foreground/50 font-medium uppercase tracking-wide">NYS Assembly</p>
             <p className="text-sm font-semibold truncate">{office?.name || 'Bill Tracker 2026'}</p>

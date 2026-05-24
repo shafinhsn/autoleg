@@ -16,6 +16,7 @@ export default function Settings() {
     name: '',
     branding_color: '#1e3a5f',
     news_api_key: '',
+    senate_api_key: '',
   });
   const [saving, setSaving] = useState(false);
 
@@ -25,6 +26,7 @@ export default function Settings() {
         name: office.name || '',
         branding_color: office.branding_color || '#1e3a5f',
         news_api_key: office.news_api_key || '',
+        senate_api_key: office.senate_api_key || '',
       });
     }
   }, [office]);
@@ -101,6 +103,20 @@ export default function Settings() {
           <CardDescription>Configure external service API keys</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>NY Senate Open Legislation API Key</Label>
+            <Input
+              type="password"
+              value={form.senate_api_key}
+              onChange={e => setForm(f => ({ ...f, senate_api_key: e.target.value }))}
+              placeholder="Enter your NY Senate API key"
+            />
+            <p className="text-xs text-muted-foreground">
+              Used to sync bill data, sponsors, and committee info. Get a key at{' '}
+              <a href="https://legislation.nysenate.gov/static/docs/html/index.html" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">legislation.nysenate.gov</a>.
+              A default key is provided but may be rate-limited.
+            </p>
+          </div>
           <div className="space-y-2">
             <Label>News API Key</Label>
             <Input

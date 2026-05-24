@@ -12,10 +12,19 @@ export default function OfficeSetup() {
   const [brandingColor, setBrandingColor] = useState('#1e3a5f');
   const [inviteCode, setInviteCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   async function handleCreate() {
     if (!officeName.trim()) return;
+    setError('');
     setLoading(true);
+    // Check for duplicate office name
+    const existing = await base44.entities.Office.filter({ name: officeName.trim() });
+    if (existing.length > 0) {
+      setError('An office with this name already exists. Please choose a different name.');
+      setLoading(false);
+      return;
+    }
     const code = Math.random().toString(36).substring(2, 10).toUpperCase();
     const user = await base44.auth.me();
     const office = await base44.entities.Office.create({
@@ -116,8 +125,11 @@ export default function OfficeSetup() {
                 <span className="text-sm text-muted-foreground">{brandingColor}</span>
               </div>
             </div>
+            {error && (
+              <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>
+            )}
             <div className="flex gap-3 pt-2">
-              <Button variant="outline" onClick={() => setMode(null)} disabled={loading}>Back</Button>
+              <Button variant="outline" onClick={() => { setMode(null); setError(''); }} disabled={loading}>Back</Button>
               <Button onClick={handleCreate} disabled={loading || !officeName.trim()} className="flex-1">
                 {loading ? 'Creating...' : 'Create Office'}
               </Button>
