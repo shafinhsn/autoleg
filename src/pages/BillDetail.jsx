@@ -12,6 +12,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/use-toast';
 import MultiTagSelect from '@/components/bills/MultiTagSelect';
+import { syncBill } from '@/lib/syncBill';
 
 export default function BillDetail() {
   const urlParams = new URLSearchParams(window.location.search);
@@ -78,38 +79,11 @@ export default function BillDetail() {
 
   async function handleSync() {
     setSyncing(true);
-    const url = `https://legislation.nysenate.gov/api/3/bills/${bill.session_year || 2026}/${bill.bill_number}?key=tSBEMOLz2kk1HVzenAxZGy64XAMOBJmx`;
-    try {
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error('Not found');
-      const data = await resp.json();
-      const result = data?.result;
-      if (!result) throw new Error('No result');
-
-      const updateData = {};
-      const sponsor = result.sponsor?.member;
-      if (sponsor) {
-        const sponsorName = sponsor.fullName || sponsor.shortName || `${sponsor.firstName || ''} ${sponsor.lastName || ''}`.trim();
-        if (sponsorName) updateData.senate_sponsor = sponsorName;
-      }
-      if (result.title) updateData.title = result.title;
-      if (result.status?.statusDesc) updateData.latest_status = result.status.statusDesc;
-      if (result.status?.committeeName) updateData.committee = result.status.committeeName;
-
-      const sameAs = result.amendments?.items;
-      if (sameAs) {
-        const latestAmendment = Object.values(sameAs).pop();
-        if (latestAmendment?.sameAs?.items?.[0]) {
-          updateData.linked_senate_bill = latestAmendment.sameAs.items[0].basePrintNo;
-        }
-      }
-
-      await base44.entities.Bill.update(bill.id, updateData);
-      qc.invalidateQueries({ queryKey: ['bill', billId] });
-      toast({ title: 'Synced from Senate API' });
-    } catch {
-      toast({ title: 'Sync failed', description: 'Bill may not be found in Senate API', variant: 'destructive' });
-    }
+    const apiKey = office?.senate_api_key || 'tSBEMOLz2kk1HVzenAxZGy64XAMOBJmx';
+    const didUpdate = await syncBill(bill, apiKey);
+    qc.invalidateQueries({ queryKey: ['bill', billId] });
+    qc.invalidateQueries({ queryKey: ['bills'] });
+    toast({ title: didUpdate ? 'Synced from Senate API' : 'No changes found' });
     setSyncing(false);
   }
 
@@ -128,19 +102,33 @@ export default function BillDetail() {
   }
 
   async function fetchNews() {
-    if (!office?.news_api_key) {
-      toast({ title: 'No News API key', description: 'Add your News API key in Settings', variant: 'destructive' });
-      return;
-    }
     setLoadingNews(true);
-    try {
-      const query = bill.bill_number + (bill.short_name ? ` OR "${bill.short_name}"` : '');
-      const resp = await fetch(`https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&sortBy=publishedAt&pageSize=10&apiKey=${office.news_api_key}`);
-      const data = await resp.json();
-      setNews(data.articles || []);
-    } catch {
-      toast({ title: 'Failed to fetch news', variant: 'destructive' });
-    }
+    const query = `${bill.bill_number}${bill.short_name ? ` "${bill.short_name}"` : ''} New York legislature`;
+    const result = await base44.integrations.Core.InvokeLLM({
+      prompt: `Search for recent news articles about this New York State legislation: ${query}. 
+Bill title: ${bill.title || bill.short_name || bill.bill_number}
+Return up to 6 recent news articles about this bill or related legislation.`,
+      add_context_from_internet: true,
+      response_json_schema: {
+        type: 'object',
+        properties: {
+          articles: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                description: { type: 'string' },
+                url: { type: 'string' },
+                source: { type: 'object', properties: { name: { type: 'string' } } },
+                publishedAt: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    });
+    setNews(result?.articles || []);
     setLoadingNews(false);
   }
 

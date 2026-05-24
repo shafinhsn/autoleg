@@ -9,19 +9,30 @@ export async function syncBill(bill, apiKey) {
   if (!billNum) return false;
 
   const year = bill.session_year || 2026;
+  const isSenateBill = billNum.startsWith('S');
   const url = `https://legislation.nysenate.gov/api/3/bills/${year}/${billNum}?key=${apiKey}&view=with_refs`;
 
   const result = await base44.integrations.Core.InvokeLLM({
-    prompt: `Fetch the JSON from this NY Senate Open Legislation API URL and extract the bill data: ${url}
+    prompt: `Please fetch the following NY Senate Open Legislation API URL and extract bill data from the JSON response:
 
-Return ONLY a JSON object with these fields (use null if not available):
-- title: the bill title
-- latest_status: the statusDesc from status object
-- committee: the committeeName from status object  
-- senate_sponsor: sponsor full name if bill number starts with S, otherwise null
-- assembly_sponsor: primary sponsor full name if bill number starts with A, otherwise null
-- linked_senate_bill: the basePrintNo from sameAs items in the latest amendment (null if none)
-- hearing_date: date (YYYY-MM-DD) from the most recent action with text containing "HEARING", "COMMITTEE", or "FLOOR" (null if none)`,
+URL: ${url}
+
+This is bill ${billNum} (${isSenateBill ? 'Senate' : 'Assembly'} bill) from the ${year} session.
+
+From the JSON response, extract:
+1. title - the bill's full title (result.title)
+2. latest_status - the status description (result.status.statusDesc)
+3. committee - the committee name (result.status.committeeName)
+4. senate_sponsor - The FULL NAME of the primary sponsor. 
+   - Look in result.sponsor.member.fullName OR result.sponsor.member.shortName OR combine result.sponsor.member.firstName + result.sponsor.member.lastName
+   - If result.sponsor is null, look in the latest amendment's multiSponsors or coSponsors items
+   - ALWAYS return the senate sponsor name regardless of whether this is an A or S bill — it is the legislator who introduced the companion senate version
+   - For an Assembly bill (starts with A), look in the latest amendment's sameAs items, then fetch that senate bill's sponsor, or look for any senate sponsor mentioned
+5. assembly_sponsor - The full name of the assembly sponsor. For Assembly bills (starts with A), this is result.sponsor.member.fullName. For Senate bills this is null.
+6. linked_senate_bill - The companion senate bill number from the latest amendment's sameAs.items[0].basePrintNo (null if none)
+7. hearing_date - YYYY-MM-DD date from the most recent action whose text contains "HEARING", "REFERRED", "COMMITTED", or "FLOOR" (null if none)
+
+Return a JSON object with exactly these keys.`,
     add_context_from_internet: true,
     response_json_schema: {
       type: 'object',
