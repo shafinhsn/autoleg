@@ -9,6 +9,7 @@ import { toast } from '@/components/ui/use-toast';
 import SectionHeaderBar from '@/components/bills/SectionHeaderBar';
 import BillRow from '@/components/bills/BillRow.jsx';
 import { getSectionColor } from '@/lib/bill-utils';
+import { syncBill } from '@/lib/syncBill';
 import { Link } from 'react-router-dom';
 
 export default function Bills() {
@@ -140,72 +141,9 @@ export default function Bills() {
     let updated = 0;
     const apiKey = office?.senate_api_key || 'tSBEMOLz2kk1HVzenAxZGy64XAMOBJmx';
     for (const bill of bills) {
-      const billNum = bill.bill_number?.trim().toUpperCase();
-      if (!billNum) continue;
-      const year = bill.session_year || 2026;
-      const url = `https://legislation.nysenate.gov/api/3/bills/${year}/${billNum}?key=${apiKey}&view=with_refs`;
       try {
-        const resp = await fetch(url);
-        if (!resp.ok) continue;
-        const data = await resp.json();
-        const result = data?.result;
-        if (!result) continue;
-        const updateData = {};
-
-        // Title
-        if (result.title) updateData.title = result.title;
-
-        // Primary sponsor — correctly extract from primarySponsor or sponsor
-        const primarySponsor = result.sponsor?.member || result.primarySponsor?.member;
-        if (primarySponsor) {
-          const firstName = primarySponsor.firstName || '';
-          const lastName = primarySponsor.lastName || '';
-          const fullName = primarySponsor.fullName || `${firstName} ${lastName}`.trim();
-          if (fullName) {
-            if (billNum.startsWith('S')) {
-              updateData.senate_sponsor = fullName;
-            } else {
-              updateData.assembly_sponsor = fullName;
-              // Also set senate sponsor if there's a same-as
-            }
-          }
-        }
-
-        // Status
-        if (result.status?.statusDesc) updateData.latest_status = result.status.statusDesc;
-        if (result.status?.committeeName) updateData.committee = result.status.committeeName;
-
-        // Same-as / companion bill
-        const amendments = result.amendments?.items;
-        if (amendments) {
-          const latestAmend = Object.values(amendments).pop();
-          const sameAs = latestAmend?.sameAs?.items;
-          if (sameAs && sameAs.length > 0) {
-            updateData.linked_senate_bill = sameAs[0].basePrintNo;
-            // Try to get senate sponsor from the companion
-          }
-          // Assembly sponsor from co-sponsors
-          if (!updateData.assembly_sponsor && latestAmend?.coSponsors?.items?.length > 0) {
-            const co = latestAmend.coSponsors.items[0];
-            if (co.fullName || co.lastName) {
-              updateData.assembly_sponsor = co.fullName || `${co.firstName || ''} ${co.lastName}`.trim();
-            }
-          }
-        }
-
-        // Hearing date from actions
-        const actions = result.actions?.items || [];
-        const hearingAction = actions.find(a =>
-          /hearing|committee|floor/i.test(a.text || '')
-        );
-        if (hearingAction?.date) {
-          updateData.hearing_date = hearingAction.date.split('T')[0];
-        }
-
-        if (Object.keys(updateData).length > 0) {
-          await base44.entities.Bill.update(bill.id, updateData);
-          updated++;
-        }
+        const didUpdate = await syncBill(bill, apiKey);
+        if (didUpdate) updated++;
       } catch (e) {
         console.error(`Failed to sync ${bill.bill_number}:`, e);
       }

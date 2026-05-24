@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { syncBill } from '@/lib/syncBill';
 
 const STATUS_COLORS = [
   '#3b82f6','#f97316','#10b981','#8b5cf6','#f59e0b',
@@ -62,37 +63,9 @@ export default function Dashboard() {
     let updated = 0;
     const apiKey = office?.senate_api_key || 'tSBEMOLz2kk1HVzenAxZGy64XAMOBJmx';
     for (const bill of bills) {
-      const billNum = bill.bill_number?.trim().toUpperCase();
-      if (!billNum) continue;
-      const year = bill.session_year || 2026;
-      const url = `https://legislation.nysenate.gov/api/3/bills/${year}/${billNum}?key=${apiKey}&view=with_refs`;
       try {
-        const resp = await fetch(url);
-        if (!resp.ok) continue;
-        const data = await resp.json();
-        const result = data?.result;
-        if (!result) continue;
-        const updateData = {};
-        if (result.title) updateData.title = result.title;
-        const primarySponsor = result.sponsor?.member || result.primarySponsor?.member;
-        if (primarySponsor) {
-          const fullName = primarySponsor.fullName || `${primarySponsor.firstName || ''} ${primarySponsor.lastName || ''}`.trim();
-          if (fullName) {
-            if (billNum.startsWith('S')) updateData.senate_sponsor = fullName;
-            else updateData.assembly_sponsor = fullName;
-          }
-        }
-        if (result.status?.statusDesc) updateData.latest_status = result.status.statusDesc;
-        if (result.status?.committeeName) updateData.committee = result.status.committeeName;
-        const amendments = result.amendments?.items;
-        if (amendments) {
-          const latestAmend = Object.values(amendments).pop();
-          if (latestAmend?.sameAs?.items?.[0]) updateData.linked_senate_bill = latestAmend.sameAs.items[0].basePrintNo;
-        }
-        const actions = result.actions?.items || [];
-        const hearingAction = actions.find(a => /hearing|committee|floor/i.test(a.text || ''));
-        if (hearingAction?.date) updateData.hearing_date = hearingAction.date.split('T')[0];
-        if (Object.keys(updateData).length > 0) { await base44.entities.Bill.update(bill.id, updateData); updated++; }
+        const didUpdate = await syncBill(bill, apiKey);
+        if (didUpdate) updated++;
       } catch (e) { console.error('Sync error', bill.bill_number, e); }
     }
     setSyncing(false);
