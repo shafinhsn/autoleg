@@ -1,62 +1,92 @@
 import { base44 } from '@/api/base44Client';
 
 /**
- * Fetches bill data from NY Senate Open Legislation API via LLM web search
- * and updates the bill record. Returns true if updated.
+ * Fetches bill data directly from NY Senate Open Legislation API
+ * and updates the bill record. Returns true if any fields were updated.
  */
 export async function syncBill(bill, apiKey) {
   const billNum = bill.bill_number?.trim().toUpperCase();
   if (!billNum) return false;
 
   const year = bill.session_year || 2026;
-  const isSenateBill = billNum.startsWith('S');
-  const url = `https://legislation.nysenate.gov/api/3/bills/${year}/${billNum}?key=${apiKey}&view=with_refs`;
+  const key = apiKey || 'tSBEMOLz2kk1HVzenAxZGy64XAMOBJmx';
+  const url = `https://legislation.nysenate.gov/api/3/bills/${year}/${billNum}?key=${key}&view=with_refs`;
 
-  const result = await base44.integrations.Core.InvokeLLM({
-    prompt: `Please fetch the following NY Senate Open Legislation API URL and extract bill data from the JSON response:
+  const resp = await fetch(url);
+  if (!resp.ok) return false;
 
-URL: ${url}
-
-This is bill ${billNum} (${isSenateBill ? 'Senate' : 'Assembly'} bill) from the ${year} session.
-
-From the JSON response, extract:
-1. title - the bill's full title (result.title)
-2. latest_status - the status description (result.status.statusDesc)
-3. committee - the committee name (result.status.committeeName)
-4. senate_sponsor - The FULL NAME of the primary sponsor. 
-   - Look in result.sponsor.member.fullName OR result.sponsor.member.shortName OR combine result.sponsor.member.firstName + result.sponsor.member.lastName
-   - If result.sponsor is null, look in the latest amendment's multiSponsors or coSponsors items
-   - ALWAYS return the senate sponsor name regardless of whether this is an A or S bill — it is the legislator who introduced the companion senate version
-   - For an Assembly bill (starts with A), look in the latest amendment's sameAs items, then fetch that senate bill's sponsor, or look for any senate sponsor mentioned
-5. assembly_sponsor - The full name of the assembly sponsor. For Assembly bills (starts with A), this is result.sponsor.member.fullName. For Senate bills this is null.
-6. linked_senate_bill - The companion senate bill number from the latest amendment's sameAs.items[0].basePrintNo (null if none)
-7. hearing_date - YYYY-MM-DD date from the most recent action whose text contains "HEARING", "REFERRED", "COMMITTED", or "FLOOR" (null if none)
-
-Return a JSON object with exactly these keys.`,
-    add_context_from_internet: true,
-    response_json_schema: {
-      type: 'object',
-      properties: {
-        title: { type: 'string' },
-        latest_status: { type: 'string' },
-        committee: { type: 'string' },
-        senate_sponsor: { type: 'string' },
-        assembly_sponsor: { type: 'string' },
-        linked_senate_bill: { type: 'string' },
-        hearing_date: { type: 'string' },
-      },
-    },
-  });
-
+  const json = await resp.json();
+  const result = json?.result;
   if (!result) return false;
 
-  // Accept any non-null, non-empty string value
   const updateData = {};
-  const fields = ['title', 'latest_status', 'committee', 'senate_sponsor', 'assembly_sponsor', 'linked_senate_bill', 'hearing_date'];
-  for (const field of fields) {
-    const val = result[field];
-    if (val && typeof val === 'string' && val.trim() && val.trim().toLowerCase() !== 'null' && val.trim().toLowerCase() !== 'n/a') {
-      updateData[field] = val.trim();
+
+  // Title
+  if (result.title) updateData.title = result.title;
+
+  // Status
+  if (result.status?.statusDesc) updateData.latest_status = result.status.statusDesc;
+
+  // Committee
+  if (result.status?.committeeName) updateData.committee = result.status.committeeName;
+
+  // Primary sponsor — this is always the bill's own lead sponsor
+  const sponsorMember = result.sponsor?.member;
+  if (sponsorMember) {
+    const name = sponsorMember.fullName
+      || `${sponsorMember.firstName || ''} ${sponsorMember.lastName || ''}`.trim()
+      || sponsorMember.shortName;
+    if (name) {
+      if (billNum.startsWith('S')) {
+        updateData.senate_sponsor = name;
+      } else {
+        updateData.assembly_sponsor = name;
+      }
+    }
+  }
+
+  // For Assembly bills: look for a linked Senate companion bill (sameAs)
+  // Then separately store the senate companion bill number and try to look up its sponsor
+  const amendments = result.amendments?.items || {};
+  const latestAmendmentKey = Object.keys(amendments).pop();
+  const latestAmendment = latestAmendmentKey ? amendments[latestAmendmentKey] : null;
+
+  if (latestAmendment) {
+    const sameAsItems = latestAmendment.sameAs?.items || [];
+    if (sameAsItems.length > 0) {
+      const companion = sameAsItems[0];
+      updateData.linked_senate_bill = companion.basePrintNo || companion.printNo;
+
+      // If this is an Assembly bill, fetch the Senate companion's sponsor
+      if (billNum.startsWith('A') && companion.basePrintNo) {
+        try {
+          const sUrl = `https://legislation.nysenate.gov/api/3/bills/${year}/${companion.basePrintNo}?key=${key}`;
+          const sResp = await fetch(sUrl);
+          if (sResp.ok) {
+            const sJson = await sResp.json();
+            const sMember = sJson?.result?.sponsor?.member;
+            if (sMember) {
+              const sName = sMember.fullName
+                || `${sMember.firstName || ''} ${sMember.lastName || ''}`.trim()
+                || sMember.shortName;
+              if (sName) updateData.senate_sponsor = sName;
+            }
+          }
+        } catch (_) { /* non-fatal */ }
+      }
+    }
+  }
+
+  // Hearing date: find most recent action mentioning a hearing/committee/floor
+  const actions = result.actions?.items || [];
+  for (let i = actions.length - 1; i >= 0; i--) {
+    const action = actions[i];
+    const text = (action.text || '').toUpperCase();
+    if (text.includes('HEARING') || text.includes('COMMITTEE') || text.includes('FLOOR')) {
+      if (action.date) {
+        updateData.hearing_date = action.date.split('T')[0];
+        break;
+      }
     }
   }
 
