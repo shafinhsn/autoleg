@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useOffice } from '@/hooks/useOffice';
-import { Search, Plus, RefreshCw, Upload, Trash2 } from 'lucide-react';
+import { Search, Plus, RefreshCw, Upload, Trash2, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/use-toast';
@@ -25,6 +25,41 @@ export default function Bills() {
   const [expandedSections, setExpandedSections] = useState(new Set());
   const [syncing, setSyncing] = useState(false);
   const [selectedBills, setSelectedBills] = useState(new Set());
+
+  function handleExportCSV() {
+    const allBills = bills; // export all, not just filtered
+    const headers = [
+      'bill_number', 'short_name', 'title', 'senate_sponsor', 'assembly_sponsor',
+      'committee', 'latest_status', 'section_header', 'tags',
+      'pc_contact', 'next_steps', 'session_comments', 'lobbyist',
+      'bill_documents', 'internal_notes', 'staff_assignees',
+      'linked_senate_bill', 'google_drive_url', 'is_caucus_bill',
+      'chamber', 'session_year', 'hearing_date', 'hearing_time', 'hearing_location',
+    ];
+
+    function escape(val) {
+      if (val === null || val === undefined) return '';
+      const str = Array.isArray(val) ? val.join('; ') : String(val);
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    }
+
+    const rows = [headers.join(',')];
+    for (const bill of allBills) {
+      rows.push(headers.map(h => escape(bill[h])).join(','));
+    }
+
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bills-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: `Exported ${allBills.length} bills` });
+  }
 
   const { data: bills = [], isLoading } = useQuery({
     queryKey: ['bills', office?.id],
@@ -310,6 +345,9 @@ export default function Bills() {
           </Button>
           <Button variant="outline" size="sm" asChild>
             <Link to="/import"><Upload className="w-4 h-4 mr-1.5" /> Import</Link>
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={bills.length === 0}>
+            <Download className="w-4 h-4 mr-1.5" /> Export
           </Button>
           {isAdmin && (
             <Button variant="outline" size="sm" onClick={addSection}>

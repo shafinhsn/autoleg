@@ -5,8 +5,15 @@ export const BILL_NUMBER_RE = /^[ASas]\d+/;
 export function detectSectionTag(value) {
   const v = value.trim().toUpperCase().replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
   if (!v) return null;
+  // Order matters: check TOP 5 before TOP 10
   if (/\bTOP\s*5\b/.test(v) || /\bTOP\s*FIVE\b/.test(v)) return "TOP 5 PRIORITY";
   if (/\bTOP\s*10\b/.test(v) || /\bTOP\s*TEN\b/.test(v)) return "TOP 10 PRIORITY";
+  if (/\bPRIORITY\b/.test(v) && /\bROUND\b/.test(v)) {
+    // e.g. "PRIORITY BILLS ROUND 3" — use the full detected context
+    if (/\bROUND\s*1\b/.test(v)) return "TOP 5 PRIORITY";
+    if (/\bROUND\s*2\b/.test(v)) return "TOP 10 PRIORITY";
+    if (/\bROUND\s*3\b/.test(v)) return "ROUND 3 PRIORITY";
+  }
   if (/\bPOST\s*BUDGET\b/.test(v)) return "POST BUDGET";
   if (/\bBUDGET\b/.test(v)) return "BUDGET";
   if (/\bPASSED\b/.test(v)) return "PASSED";
@@ -74,6 +81,9 @@ export const COLUMN_MAP = {
   "drive folder": "google_drive_url",
   "caucus bill": "is_caucus_bill",
   "caucus": "is_caucus_bill",
+  "bill push actions": "skip",
+  "comments": "session_comments",
+  " comments": "session_comments",
 };
 
 export const SECTION_COLORS = {

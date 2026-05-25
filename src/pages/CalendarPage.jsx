@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useOffice } from '@/hooks/useOffice';
-import { ChevronLeft, ChevronRight, Calendar, Building2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Building2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isSameMonth, addMonths, subMonths, startOfWeek, endOfWeek } from 'date-fns';
 import { Link } from 'react-router-dom';
+import { syncCalendarDates } from '@/lib/syncBill';
+import { toast } from '@/components/ui/use-toast';
 
 const COMMITTEE_COLORS = [
   '#3b82f6', '#10b981', '#f97316', '#8b5cf6', '#ec4899',
@@ -20,8 +22,10 @@ function getCommitteeColor(committee, index) {
 
 export default function CalendarPage() {
   const { office } = useOffice();
+  const qc = useQueryClient();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
+  const [syncing, setSyncing] = useState(false);
 
   const { data: bills = [] } = useQuery({
     queryKey: ['bills', office?.id],
@@ -50,6 +54,15 @@ export default function CalendarPage() {
       if (!isNaN(parsed)) return parsed;
     }
     return null;
+  }
+
+  async function handleSyncCalendar() {
+    setSyncing(true);
+    const apiKey = office?.senate_api_key || 'tSBEMOLz2kk1HVzenAxZGy64XAMOBJmx';
+    const updated = await syncCalendarDates(bills, apiKey);
+    qc.invalidateQueries({ queryKey: ['bills'] });
+    setSyncing(false);
+    toast({ title: `Calendar synced — ${updated} bill${updated !== 1 ? 's' : ''} updated with hearing dates` });
   }
 
   function getBillsForDay(day) {
@@ -89,6 +102,10 @@ export default function CalendarPage() {
             <ChevronRight className="w-4 h-4" />
           </Button>
           <Button variant="outline" size="sm" onClick={() => setCurrentDate(new Date())}>Today</Button>
+          <Button variant="outline" size="sm" onClick={handleSyncCalendar} disabled={syncing}>
+            <RefreshCw className={`w-4 h-4 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Syncing...' : 'Sync Calendar'}
+          </Button>
         </div>
       </div>
 
