@@ -46,7 +46,7 @@ export default function OfficeSetup() {
       alert('Invalid invite code. Please check and try again.');
       return;
     }
-    await base44.auth.updateMe({ office_id: offices[0].id, role: 'user' });
+    await base44.auth.updateMe({ office_id: offices[0].id, role: 'staffer' });
     window.location.reload();
   }
 

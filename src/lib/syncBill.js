@@ -50,14 +50,15 @@ Return a JSON object with exactly these keys.`,
 
   if (!result) return false;
 
+  // Accept any non-null, non-empty string value
   const updateData = {};
-  if (result.title) updateData.title = result.title;
-  if (result.latest_status) updateData.latest_status = result.latest_status;
-  if (result.committee) updateData.committee = result.committee;
-  if (result.senate_sponsor) updateData.senate_sponsor = result.senate_sponsor;
-  if (result.assembly_sponsor) updateData.assembly_sponsor = result.assembly_sponsor;
-  if (result.linked_senate_bill) updateData.linked_senate_bill = result.linked_senate_bill;
-  if (result.hearing_date) updateData.hearing_date = result.hearing_date;
+  const fields = ['title', 'latest_status', 'committee', 'senate_sponsor', 'assembly_sponsor', 'linked_senate_bill', 'hearing_date'];
+  for (const field of fields) {
+    const val = result[field];
+    if (val && typeof val === 'string' && val.trim() && val.trim().toLowerCase() !== 'null' && val.trim().toLowerCase() !== 'n/a') {
+      updateData[field] = val.trim();
+    }
+  }
 
   if (Object.keys(updateData).length > 0) {
     await base44.entities.Bill.update(bill.id, updateData);

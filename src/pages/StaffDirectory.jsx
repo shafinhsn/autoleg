@@ -13,10 +13,12 @@ const ROLES = [
   { value: 'legislative_director', label: 'Legislative Director', icon: Crown, color: 'text-amber-600 bg-amber-50' },
   { value: 'staffer', label: 'General Staffer', icon: UserCheck, color: 'text-blue-600 bg-blue-50' },
   { value: 'intern', label: 'Intern', icon: GraduationCap, color: 'text-emerald-600 bg-emerald-50' },
+  // 'user' is the default platform role assigned on join-via-code; treated as unassigned staffer
+  { value: 'user', label: 'Unassigned (New)', icon: UserCheck, color: 'text-gray-600 bg-gray-50' },
 ];
 
 function roleInfo(role) {
-  return ROLES.find(r => r.value === role) || ROLES[2];
+  return ROLES.find(r => r.value === role) || ROLES.find(r => r.value === 'user');
 }
 
 export default function StaffDirectory() {
@@ -49,8 +51,20 @@ export default function StaffDirectory() {
     if (!inviteEmail.trim()) return;
     setInviting(true);
     try {
+      // Invite the user to the platform (sends login email)
       await base44.users.inviteUser(inviteEmail.trim(), inviteRole === 'admin' ? 'admin' : 'user');
-      toast({ title: `Invited ${inviteEmail}`, description: 'They will receive an email to join.' });
+      // Also send them the office invite code so they know how to join
+      await base44.integrations.Core.SendEmail({
+        to: inviteEmail.trim(),
+        subject: `You've been invited to join ${office?.name}`,
+        body: `Hi,\n\nYou've been invited to join ${office?.name} on Assembly Bill Watch.\n\n` +
+          `Step 1: Log in at the link sent to you by the platform.\n` +
+          `Step 2: When prompted, select "Join an Existing Office" and enter this invite code:\n\n` +
+          `  ${office?.invite_code}\n\n` +
+          `You'll then have access to the office's bill tracker and team tools.\n\n` +
+          `Questions? Reply to this email or contact your office administrator.`,
+      });
+      toast({ title: `Invited ${inviteEmail}`, description: 'Login link + office code sent.' });
       setInviteEmail('');
     } catch (e) {
       toast({ title: 'Invite failed', description: e.message, variant: 'destructive' });
@@ -68,6 +82,7 @@ export default function StaffDirectory() {
     legislative_director: staff.filter(s => s.role === 'legislative_director'),
     staffer: staff.filter(s => s.role === 'staffer'),
     intern: staff.filter(s => s.role === 'intern'),
+    user: staff.filter(s => s.role === 'user' || !s.role),
   };
 
   return (
@@ -128,13 +143,13 @@ export default function StaffDirectory() {
         </Card>
       ) : (
         <div className="space-y-6">
-          {ROLES.map(({ value, label, icon: Icon }) => {
+          {ROLES.map(({ value, label, icon: RoleIcon }) => {
             const members = grouped[value] || [];
             if (members.length === 0) return null;
             return (
               <div key={value}>
                 <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
-                  <Icon className="w-4 h-4" /> {label}s ({members.length})
+                  <RoleIcon className="w-4 h-4" /> {label}s ({members.length})
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {members.map(member => {

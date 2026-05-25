@@ -11,6 +11,7 @@ import BillRow from '@/components/bills/BillRow.jsx';
 import { getSectionColor } from '@/lib/bill-utils';
 import { syncBill } from '@/lib/syncBill';
 import { Link } from 'react-router-dom';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 export default function Bills() {
   const { office, isAdmin } = useOffice();
@@ -127,8 +128,9 @@ export default function Bills() {
 
   async function handleDeleteBill(id, billNumber) {
     if (!confirm(`Remove ${billNumber} from tracker?`)) return;
-    await base44.entities.Bill.delete(id);
-    qc.invalidateQueries({ queryKey: ['bills'] });
+    // Optimistic: remove from cache immediately
+    qc.setQueryData(['bills', office?.id], (old = []) => old.filter(b => b.id !== id));
+    base44.entities.Bill.delete(id).then(() => qc.invalidateQueries({ queryKey: ['bills'] }));
     toast({ title: `Removed ${billNumber}` });
   }
 
@@ -167,12 +169,52 @@ export default function Bills() {
   async function addSection() {
     const name = prompt('Section name (e.g. TOP 5 PRIORITY):');
     if (!name?.trim()) return;
+    const sectionName = name.trim().toUpperCase();
+    // Create section header
     await base44.entities.SectionHeader.create({
       office_id: office.id,
-      name: name.trim().toUpperCase(),
-      color: getSectionColor(name.trim().toUpperCase()),
+      name: sectionName,
+      color: getSectionColor(sectionName),
       sort_order: sections.length,
     });
+    // Also create a matching priority tag if not already in TrackerConfig
+    const existingConfig = await base44.entities.TrackerConfig.filter({ office_id: office.id, config_type: 'priority_tags' });
+    if (existingConfig.length > 0) {
+      const config = existingConfig[0];
+      const items = config.items || [];
+      if (!items.find(i => i.label === sectionName)) {
+        await base44.entities.TrackerConfig.update(config.id, {
+          items: [...items, { label: sectionName, color: 'blue', sort_order: items.length }],
+        });
+        qc.invalidateQueries({ queryKey: ['tracker-config'] });
+      }
+    } else {
+      await base44.entities.TrackerConfig.create({
+        office_id: office.id,
+        config_type: 'priority_tags',
+        items: [{ label: sectionName, color: 'blue', sort_order: 0 }],
+      });
+      qc.invalidateQueries({ queryKey: ['tracker-config'] });
+    }
+    qc.invalidateQueries({ queryKey: ['sections'] });
+    toast({ title: `Section "${sectionName}" created` });
+  }
+
+  async function handleDragEnd(result) {
+    if (!result.destination) return;
+    const { source, destination } = result;
+    if (source.index === destination.index) return;
+
+    const reordered = [...sortedSections];
+    const [moved] = reordered.splice(source.index, 1);
+    reordered.splice(destination.index, 0, moved);
+
+    // Optimistic update in cache
+    const updated = reordered.map((s, i) => ({ ...s, sort_order: i }));
+    qc.setQueryData(['sections', office?.id], updated);
+
+    // Persist to DB
+    await Promise.all(updated.map(s => base44.entities.SectionHeader.update(s.id, { sort_order: s.sort_order })));
     qc.invalidateQueries({ queryKey: ['sections'] });
   }
 
@@ -249,12 +291,15 @@ export default function Bills() {
         </select>
         <div className="ml-auto flex items-center gap-2">
           {selectedBills.size > 0 && (
-            <Button variant="destructive" size="sm" onClick={async () => {
+            <Button variant="destructive" size="sm" onClick={() => {
               if (!confirm(`Delete ${selectedBills.size} selected bill(s)?`)) return;
-              for (const id of selectedBills) await base44.entities.Bill.delete(id);
+              const ids = [...selectedBills];
+              const count = ids.length;
+              // Optimistic: remove from cache immediately
+              qc.setQueryData(['bills', office?.id], (old = []) => old.filter(b => !ids.includes(b.id)));
               setSelectedBills(new Set());
-              qc.invalidateQueries({ queryKey: ['bills'] });
-              toast({ title: `Deleted ${selectedBills.size} bill(s)` });
+              toast({ title: `Deleted ${count} bill(s)` });
+              Promise.all(ids.map(id => base44.entities.Bill.delete(id))).then(() => qc.invalidateQueries({ queryKey: ['bills'] }));
             }}>
               <Trash2 className="w-4 h-4 mr-1.5" /> Delete {selectedBills.size}
             </Button>
@@ -294,22 +339,40 @@ export default function Bills() {
         </div>
       ) : (
         <div className="space-y-4">
-          {sectionedBills.map(({ section, bills: sectionBills }) => (
-            <div key={section.id} className="bg-card rounded-xl border overflow-hidden">
-              <SectionHeaderBar
-                section={section} billCount={sectionBills.length}
-                expanded={expandedSections.has(section.id)}
-                onToggle={() => toggleSection(section.id)}
-                onUpdate={handleUpdateSection} onDelete={handleDeleteSection} isAdmin={isAdmin}
-              />
-              {expandedSections.has(section.id) && sectionBills.length > 0 && <BillTable bills={sectionBills} />}
-              {expandedSections.has(section.id) && sectionBills.length === 0 && (
-                <p className="text-sm text-muted-foreground py-4 px-4 text-center">No bills in this section</p>
+          <DragDropContext onDragEnd={handleDragEnd}>
+            <Droppable droppableId="sections">
+              {provided => (
+                <div className="space-y-2" ref={provided.innerRef} {...provided.droppableProps}>
+                  {sectionedBills.map(({ section, bills: sectionBills }, index) => (
+                    <Draggable key={section.id} draggableId={section.id} index={index} isDragDisabled={!isAdmin}>
+                      {(drag, snapshot) => (
+                        <div
+                          ref={drag.innerRef}
+                          {...drag.draggableProps}
+                          className={`bg-card rounded-xl border overflow-hidden ${snapshot.isDragging ? 'shadow-lg ring-2 ring-primary/30' : ''}`}
+                        >
+                          <SectionHeaderBar
+                            section={section} billCount={sectionBills.length}
+                            expanded={expandedSections.has(section.id)}
+                            onToggle={() => toggleSection(section.id)}
+                            onUpdate={handleUpdateSection} onDelete={handleDeleteSection} isAdmin={isAdmin}
+                            dragHandleProps={drag.dragHandleProps}
+                          />
+                          {expandedSections.has(section.id) && sectionBills.length > 0 && <BillTable bills={sectionBills} />}
+                          {expandedSections.has(section.id) && sectionBills.length === 0 && (
+                            <p className="text-sm text-muted-foreground py-4 px-4 text-center">No bills in this section</p>
+                          )}
+                        </div>
+                      )}
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
+                </div>
               )}
-            </div>
-          ))}
+            </Droppable>
+          </DragDropContext>
           {unsectionedBills.length > 0 && (
-            <div className="bg-card rounded-xl border overflow-hidden">
+            <div className="bg-card rounded-xl border overflow-hidden mt-2">
               <div className="flex items-center gap-3 px-4 py-3 bg-muted/50 font-semibold text-sm border-b">
                 <span>Uncategorized</span>
                 <span className="text-xs font-normal text-muted-foreground">{unsectionedBills.length} bills</span>
