@@ -67,10 +67,14 @@ Deno.serve(async (req) => {
       await sleep(100); // Rate limit
     }
 
-    // Process bills in batches with delays
+    // Process bills in batches with delays and progress tracking
     const batchSize = 3; // Smaller batch to avoid rate limits
+    const totalBatches = Math.ceil(parsedBills.length / batchSize);
+    let processedBatches = 0;
+    
     for (let i = 0; i < parsedBills.length; i += batchSize) {
       const batch = parsedBills.slice(i, i + batchSize);
+      processedBatches++;
       
       await Promise.all(batch.map(async (row) => {
         const billNum = String(row.bill_number || '').trim().toUpperCase();
@@ -130,13 +134,32 @@ Deno.serve(async (req) => {
         }
       }));
 
+      // Log progress
+      const percent = Math.round((processedBatches / totalBatches) * 100);
+      console.log(`Import progress: ${processedBatches}/${totalBatches} batches (${percent}%)`);
+
       // Delay between batches to respect rate limits
       if (i + batchSize < parsedBills.length) {
         await sleep(500); // 500ms delay between batches
       }
     }
 
-    return Response.json({ created, updated, errors, errorDetails: errorDetails.slice(0, 100) });
+    const estimatedTimePerBatch = 0.5; // seconds
+    const totalEstimatedSeconds = totalBatches * estimatedTimePerBatch;
+    const totalEstimatedMinutes = Math.ceil(totalEstimatedSeconds / 60);
+
+    return Response.json({ 
+      created, 
+      updated, 
+      errors, 
+      errorDetails: errorDetails.slice(0, 100),
+      progress: {
+        total: parsedBills.length,
+        processed: parsedBills.length,
+        percent: 100,
+        estimatedTimeMinutes: totalEstimatedMinutes,
+      },
+    });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }

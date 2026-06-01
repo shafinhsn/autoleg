@@ -2,9 +2,10 @@ import { useState, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useOffice } from '@/hooks/useOffice';
-import { Upload, CheckCircle2 } from 'lucide-react';
+import { Upload, CheckCircle2, Sparkles, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import { COLUMN_MAP, BILL_NUMBER_RE, detectSectionTag, getSectionColor } from '@/lib/bill-utils';
 import * as XLSX from 'xlsx';
 
@@ -18,7 +19,9 @@ export default function ImportCsv() {
   const [mapping, setMapping] = useState({});
   const [result, setResult] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0, percent: 0 });
   const [fileName, setFileName] = useState('');
+  const [aiAnalyzing, setAiAnalyzing] = useState(false);
 
   const BILL_FIELDS = [
     { value: 'bill_number', label: 'Bill Number *' },
@@ -44,11 +47,11 @@ export default function ImportCsv() {
     { value: 'skip', label: '— Skip column —' },
   ];
 
-  function parseFile(file) {
+  async function parseFile(file) {
     setResult(null);
     setFileName(file.name);
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: 'array' });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -59,17 +62,37 @@ export default function ImportCsv() {
       setHeaders(hdrs);
       setParsed(rows);
 
-      // Auto-map columns using COLUMN_MAP
-      const autoMap = {};
-      hdrs.forEach(h => {
-        autoMap[h] = COLUMN_MAP[h.toLowerCase().trim()] || 'skip';
-      });
-      setMapping(autoMap);
+      // AI-assisted header detection
+      setAiAnalyzing(true);
+      try {
+        const response = await base44.functions.invoke('analyzeCsvHeaders', {
+          headers: hdrs,
+          sampleRows: rows.slice(0, 5),
+        });
+        if (response.data.mapping) {
+          setMapping(response.data.mapping);
+        } else {
+          // Fallback to auto-map
+          const autoMap = {};
+          hdrs.forEach(h => {
+            autoMap[h] = COLUMN_MAP[h.toLowerCase().trim()] || 'skip';
+          });
+          setMapping(autoMap);
+        }
+      } catch (e) {
+        console.error('AI analysis failed, using fallback', e);
+        const autoMap = {};
+        hdrs.forEach(h => {
+          autoMap[h] = COLUMN_MAP[h.toLowerCase().trim()] || 'skip';
+        });
+        setMapping(autoMap);
+      }
+      setAiAnalyzing(false);
     };
     reader.readAsArrayBuffer(file);
   }
 
-  function handleFile(e) { const f = e.target.files?.[0]; if (f) parseFile(f); }
+  async function handleFile(e) { const f = e.target.files?.[0]; if (f) await parseFile(f); }
   function handleDrop(e) {
     e.preventDefault(); setDragging(false);
     const f = e.dataTransfer.files[0];
@@ -123,12 +146,14 @@ export default function ImportCsv() {
     }
 
     setImporting(true);
+    setImportProgress({ current: 0, total: validRows.length, percent: 0 });
     try {
       const response = await base44.functions.invoke('importBillsFromCsv', {
         officeId: office.id,
         rows: validRows,
       });
       setResult(response.data);
+      setImportProgress({ current: validRows.length, total: validRows.length, percent: 100 });
       qc.invalidateQueries({ queryKey: ['bills'] });
       qc.invalidateQueries({ queryKey: ['sections'] });
     } catch (e) {
@@ -197,7 +222,7 @@ export default function ImportCsv() {
         >
           <Upload className="w-10 h-10 mx-auto text-muted-foreground mb-4" />
           <p className="font-medium">Drop your file here or click to browse</p>
-          <p className="text-sm text-muted-foreground mt-1">Supports .csv and .xlsx files</p>
+          <p className="text-sm text-muted-foreground mt-1">Supports .csv and .xlsx files • AI-powered header detection</p>
           <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFile} />
         </div>
       )}
@@ -206,9 +231,10 @@ export default function ImportCsv() {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">
-                Column Mapping — <span className="font-normal text-muted-foreground">{fileName}</span>
-                <span className="ml-2 text-sm font-normal text-muted-foreground">({parsed.length} rows)</span>
+              <CardTitle className="text-base flex items-center gap-2">
+                <span>Column Mapping — <span className="font-normal text-muted-foreground">{fileName}</span></span>
+                {aiAnalyzing && <><Loader2 className="w-4 h-4 animate-spin text-primary" /><span className="text-xs text-primary">AI analyzing...</span></>}
+                <span className="ml-auto text-sm font-normal text-muted-foreground">({parsed.length} rows)</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -230,11 +256,26 @@ export default function ImportCsv() {
             </CardContent>
           </Card>
 
+          {importing && (
+            <Card>
+              <CardContent className="p-6 space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">Importing bills...</span>
+                  <span className="text-muted-foreground">{importProgress.current} / {importProgress.total}</span>
+                </div>
+                <Progress value={importProgress.percent} className="h-2" />
+                <p className="text-xs text-muted-foreground text-center">
+                  Estimated time: {Math.ceil((importProgress.total - importProgress.current) / 3 * 0.5 / 60)} minutes remaining
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           <div className="flex items-center gap-3">
-            <Button onClick={handleImport} disabled={importing || !hasBillNumber}>
-              {importing ? 'Importing...' : `Import ${parsed.length} Rows`}
+            <Button onClick={handleImport} disabled={importing || !hasBillNumber || aiAnalyzing}>
+              {importing ? 'Importing...' : aiAnalyzing ? 'AI Analyzing...' : `Import ${parsed.length} Rows`}
             </Button>
-            <Button variant="ghost" onClick={reset}>Cancel</Button>
+            <Button variant="ghost" onClick={reset} disabled={importing}>Cancel</Button>
           </div>
           {!hasBillNumber && (
             <p className="text-sm text-destructive">Map at least one column to "Bill Number" before importing.</p>

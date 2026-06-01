@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useOffice } from '@/hooks/useOffice';
 import { DEFAULT_PRIORITY_TAGS, DEFAULT_STATUSES, DEFAULT_COMMITTEES } from '@/lib/tracker-defaults';
-import { Search, Plus, RefreshCw, Upload, Trash2, Download } from 'lucide-react';
+import { Search, Plus, RefreshCw, Upload, Trash2, Download, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import SectionHeaderBar from '@/components/bills/SectionHeaderBar';
@@ -24,6 +24,7 @@ export default function Bills() {
   const [newBillNumber, setNewBillNumber] = useState('');
   const [expandedSections, setExpandedSections] = useState(new Set());
   const [syncing, setSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState({ current: 0, total: 0, percent: 0 });
   const [selectedBills, setSelectedBills] = useState(new Set());
   const [deleteResult, setDeleteResult] = useState(null);
 
@@ -161,9 +162,11 @@ export default function Bills() {
   async function handleSync() {
     if (bills.length === 0) return;
     setSyncing(true);
+    setSyncProgress({ current: 0, total: bills.length, percent: 0 });
     const apiKey = office?.senate_api_key || '5OuWFvXYcEmkPHLLaRPiHDHbVgnamYTL';
     // Process in batches of 5 concurrently to balance speed vs rate limits
     const batchSize = 5;
+    let processed = 0;
     for (let i = 0; i < bills.length; i += batchSize) {
       const batch = bills.slice(i, i + batchSize);
       await Promise.all(batch.map(async bill => {
@@ -172,10 +175,13 @@ export default function Bills() {
           if (updateData) await base44.entities.Bill.update(bill.id, updateData);
         } catch (e) { console.error(`Sync error ${bill.bill_number}`, e); }
       }));
+      processed += batch.length;
+      setSyncProgress({ current: processed, total: bills.length, percent: Math.round((processed / bills.length) * 100) });
       if (i + batchSize < bills.length) await new Promise(r => setTimeout(r, 100));
     }
     invalidateBills();
     setSyncing(false);
+    setSyncProgress({ current: 0, total: 0, percent: 0 });
   }
 
   async function handleUpdateSection(id, data) {
@@ -360,9 +366,9 @@ export default function Bills() {
               <Trash2 className="w-4 h-4 mr-1.5" /> Delete {selectedBills.size}
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
+          <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing} className="min-w-[100px]">
             <RefreshCw className={`w-4 h-4 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Syncing...' : 'Sync'}
+            {syncing ? `${syncProgress.percent}%` : 'Sync'}
           </Button>
           <Button variant="outline" size="sm" asChild>
             <Link to="/import"><Upload className="w-4 h-4 mr-1.5" /> Import</Link>
