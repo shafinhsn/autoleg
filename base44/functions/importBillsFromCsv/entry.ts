@@ -117,22 +117,36 @@ Deno.serve(async (req) => {
     // Collect failed bills for retry
     const failedBills = [];
 
+    // Function to normalize fuzzy bill numbers
+    function normalizeBillNumber(billStr) {
+      if (!billStr) return null;
+      let normalized = String(billStr).trim().toUpperCase();
+      
+      // Handle formats like "a-1155" or "A-1155" → "A1155"
+      normalized = normalized.replace(/-/g, '');
+      
+      // Handle formats like "A1 10114" or "A1  10114" → "A110114"
+      normalized = normalized.replace(/\s+/g, '');
+      
+      // Extract chamber (A or S) and digits only
+      const match = normalized.match(/^([AS])(\d+)/);
+      if (match) {
+        return match[1] + match[2];
+      }
+      
+      return null;
+    }
+
     // Process bills sequentially to avoid rate limits and timeouts
     for (let i = 0; i < parsedBills.length; i++) {
       const row = parsedBills[i];
-      let billNum = String(row.bill_number || '').trim().toUpperCase();
+      const billNum = normalizeBillNumber(row.bill_number);
       
-      // Remove suffixes like -A, -B, / S1234 for validation
-      const baseBillNum = billNum.split('-')[0].split('/')[0].trim();
-      
-      if (!baseBillNum || !/^[AS]\d+$/.test(baseBillNum)) {
+      if (!billNum || !/^[AS]\d+$/.test(billNum)) {
         errors++;
         errorDetails.push({ bill: row.bill_number || 'unknown', error: 'Invalid bill number format' });
         continue;
       }
-      
-      // Use the full bill number (with suffix) for storage
-      billNum = baseBillNum;
 
       const billData = {
         office_id: officeId,
@@ -187,8 +201,8 @@ Deno.serve(async (req) => {
       } catch (e) {
         const errorMsg = e.message || String(e);
         // Check if it's a rate limit error - add to retry queue
-        if (errorMsg.includes('rate limit') || errorMsg.includes('too many requests') || errorMsg.includes('429')) {
-          failedBills.push({ row, billNum, billData });
+        if (errorMsg.toLowerCase().includes('rate limit') || errorMsg.toLowerCase().includes('too many requests') || errorMsg.includes('429')) {
+          failedBills.push(row);
         } else {
           errors++;
           errorDetails.push({ bill: billNum, error: errorMsg });
