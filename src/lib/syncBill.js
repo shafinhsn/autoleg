@@ -103,11 +103,7 @@ export async function syncBill(bill, apiKey) {
     }
   }
 
-  if (Object.keys(updateData).length > 0) {
-    await base44.entities.Bill.update(bill.id, updateData);
-    return true;
-  }
-  return false;
+  return Object.keys(updateData).length > 0 ? updateData : null;
 }
 
 /**

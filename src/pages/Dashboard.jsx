@@ -67,8 +67,12 @@ export default function Dashboard() {
     const apiKey = office?.senate_api_key || 'tSBEMOLz2kk1HVzenAxZGy64XAMOBJmx';
     for (const bill of bills) {
       try {
-        const didUpdate = await syncBill(bill, apiKey);
-        if (didUpdate) updated++;
+        const updateData = await syncBill(bill, apiKey);
+        if (updateData) {
+          await base44.entities.Bill.update(bill.id, updateData);
+          updated++;
+        }
+        await new Promise(r => setTimeout(r, 150));
       } catch (e) { console.error('Sync error', bill.bill_number, e); }
     }
     setSyncing(false);
