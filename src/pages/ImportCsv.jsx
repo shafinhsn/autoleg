@@ -188,8 +188,9 @@ export default function ImportCsv() {
         updated: (result.updated || 0) + (response.data.updated || 0),
         errors: response.data.errors || 0,
         errorDetails: response.data.errorDetails || [],
+        failedBills: response.data.failedBills || [],
       });
-      setFailedBills([]);
+      setFailedBills(response.data.failedBills || []);
       qc.invalidateQueries({ queryKey: ['bills'] });
       qc.invalidateQueries({ queryKey: ['sections'] });
     } catch (e) {
