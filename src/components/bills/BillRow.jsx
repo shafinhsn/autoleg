@@ -181,18 +181,20 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
       <td className="py-2 px-3">
         {editingField === 'committee' ? (
           <MultiSelectDropdown 
-            currentValues={billCommittees} 
+            currentValues={Array.isArray(bill.committee) ? bill.committee : (bill.committee ? [bill.committee] : [])} 
             options={committeeOptions} 
             onSave={v => { commitEdit('committee', v); }} 
             onCancel={() => setEditingField(null)} 
           />
         ) : (
           <div onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('committee', bill.committee); }} className="flex flex-wrap gap-1">
-            {billCommittees.length > 0 ? billCommittees.map(comm => (
-              <span key={comm} className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border ${isAdmin ? 'cursor-pointer hover:opacity-80' : ''} bg-sky-100 text-sky-700 border-sky-200`}>
-                {comm}
-              </span>
-            )) : <span className="text-muted-foreground/40 text-xs cursor-pointer">—</span>}
+            {(Array.isArray(bill.committee) ? bill.committee : (bill.committee ? [bill.committee] : [])).length > 0 ? 
+              (Array.isArray(bill.committee) ? bill.committee : (bill.committee ? [bill.committee] : [])).map(comm => (
+                <span key={comm} className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border ${isAdmin ? 'cursor-pointer hover:opacity-80' : ''} bg-sky-100 text-sky-700 border-sky-200`}>
+                  {comm}
+                </span>
+              )) : <span className="text-muted-foreground/40 text-xs cursor-pointer">—</span>
+            }
           </div>
         )}
       </td>

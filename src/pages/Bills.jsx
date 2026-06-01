@@ -134,14 +134,14 @@ export default function Bills() {
 
   async function handleUpdateBill(id, data) {
     // Ensure array fields are always arrays
-    if (data.latest_status !== undefined && !Array.isArray(data.latest_status)) {
-      data.latest_status = data.latest_status ? [data.latest_status] : [];
+    if (data.latest_status !== undefined) {
+      data.latest_status = Array.isArray(data.latest_status) ? data.latest_status : (data.latest_status ? [data.latest_status] : []);
     }
-    if (data.committee !== undefined && !Array.isArray(data.committee)) {
-      data.committee = data.committee ? [data.committee] : [];
+    if (data.committee !== undefined) {
+      data.committee = Array.isArray(data.committee) ? data.committee : (data.committee ? [data.committee] : []);
     }
-    if (data.tags !== undefined && !Array.isArray(data.tags)) {
-      data.tags = data.tags ? [data.tags] : [];
+    if (data.tags !== undefined) {
+      data.tags = Array.isArray(data.tags) ? data.tags : (data.tags ? [data.tags] : []);
     }
     // When priority tag changes, update section_header to match first tag and ensure section exists
     if (data.tags !== undefined && data.tags.length > 0) {
