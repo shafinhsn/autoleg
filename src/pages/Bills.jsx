@@ -77,6 +77,10 @@ export default function Bills() {
     qc.invalidateQueries({ queryKey: ['bills', office?.id] });
   }
 
+  function invalidateConfigs() {
+    qc.invalidateQueries({ queryKey: ['tracker-config', office?.id] });
+  }
+
   // Resolve config items — use saved configs only (empty after clear data)
   const statusItems = statusConfigs[0]?.items?.length ? statusConfigs[0].items : [];
   const committeeItems = committeeConfigs[0]?.items?.length ? committeeConfigs[0].items : [];
@@ -198,6 +202,7 @@ export default function Bills() {
     }
     console.log(`Sync complete: ${updatedCount}/${bills.length} updated, ${errorCount} errors`);
     await invalidateBills();
+    invalidateConfigs();
     setSyncing(false);
     setSyncProgress({ current: 0, total: 0, percent: 0 });
     alert(`Sync complete: ${updatedCount} bills updated, ${errorCount} errors`);
