@@ -54,7 +54,7 @@ function ColorBadge({ label, colorName, onClick }) {
   );
 }
 
-// Multi-select dropdown for statuses
+// Multi-select dropdown for statuses - inline expanded view
 function MultiStatusSelect({ currentStatuses, options, onSave, onCancel }) {
   const [selected, setSelected] = useState(new Set(currentStatuses));
 
@@ -67,16 +67,18 @@ function MultiStatusSelect({ currentStatuses, options, onSave, onCancel }) {
   }
 
   return (
-    <div className="absolute z-50 bg-white border rounded-lg shadow-lg p-2 min-w-[180px] max-h-56 overflow-y-auto" style={{ top: '100%', left: 0 }}>
-      {options.map(opt => (
-        <label key={opt} className="flex items-center gap-2 px-2 py-1 hover:bg-muted/50 rounded cursor-pointer text-xs">
-          <input type="checkbox" checked={selected.has(opt)} onChange={() => toggle(opt)} className="rounded" />
-          {opt}
-        </label>
-      ))}
-      <div className="flex gap-1 mt-2 pt-2 border-t">
-        <button onClick={() => onSave([...selected])} className="flex-1 text-xs bg-primary text-white rounded px-2 py-1 hover:bg-primary/90">Save</button>
-        <button onClick={onCancel} className="flex-1 text-xs border rounded px-2 py-1 hover:bg-muted/50">Cancel</button>
+    <div className="absolute z-50 bg-white border-2 border-primary rounded-xl shadow-xl p-3 min-w-[220px] max-h-80 overflow-y-auto -left-4 mt-1">
+      <div className="grid grid-cols-2 gap-2">
+        {options.map(opt => (
+          <label key={opt} className="flex items-center gap-2 px-2 py-1.5 hover:bg-primary/5 rounded-lg cursor-pointer text-xs font-medium">
+            <input type="checkbox" checked={selected.has(opt)} onChange={() => toggle(opt)} className="rounded text-primary" />
+            <span className="truncate">{opt}</span>
+          </label>
+        ))}
+      </div>
+      <div className="flex gap-2 mt-3 pt-3 border-t border-border">
+        <button onClick={() => onSave([...selected])} className="flex-1 text-xs font-semibold bg-primary text-white rounded-lg px-3 py-1.5 hover:bg-primary/90 transition-colors">Apply</button>
+        <button onClick={onCancel} className="flex-1 text-xs font-semibold border border-border rounded-lg px-3 py-1.5 hover:bg-muted/50 transition-colors">Cancel</button>
       </div>
     </div>
   );
