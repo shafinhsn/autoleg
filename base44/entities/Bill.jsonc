@@ -31,8 +31,11 @@
       "description": "Name of the assembly sponsor"
     },
     "committee": {
-      "type": "string",
-      "description": "Committee the bill is assigned to"
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Committees the bill is assigned to"
     },
     "status": {
       "type": "string",

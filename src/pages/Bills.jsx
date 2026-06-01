@@ -99,7 +99,10 @@ export default function Bills() {
       const statuses = Array.isArray(b.latest_status) ? b.latest_status : (b.latest_status ? [b.latest_status] : []);
       if (!statuses.includes(filterStatus)) return false;
     }
-    if (filterCommittee && b.committee !== filterCommittee) return false;
+    if (filterCommittee) {
+      const committees = Array.isArray(b.committee) ? b.committee : (b.committee ? [b.committee] : []);
+      if (!committees.includes(filterCommittee)) return false;
+    }
     if (filterPriority && !(b.tags || []).includes(filterPriority)) return false;
     return true;
   });
@@ -130,32 +133,36 @@ export default function Bills() {
   }
 
   async function handleUpdateBill(id, data) {
-    // Ensure latest_status is always an array
+    // Ensure array fields are always arrays
     if (data.latest_status !== undefined && !Array.isArray(data.latest_status)) {
       data.latest_status = data.latest_status ? [data.latest_status] : [];
     }
-    // When priority tag changes, update section_header to match and ensure section exists
-    if (data.tags !== undefined) {
-      const firstTag = Array.isArray(data.tags) ? data.tags[0] : data.tags;
-      if (firstTag) {
-        data.section_header = firstTag;
-        // Ensure section header exists for this priority tag
-        const existingSection = sections.find(s => s.name === firstTag);
-        if (!existingSection) {
-          // Get the color from priority config
-          const priorityConfig = priorityItems.find(i => i.label === firstTag);
-          const sectionColor = priorityConfig?.color ? getSectionColorFromConfig(priorityConfig.color) : getSectionColor(firstTag);
-          await base44.entities.SectionHeader.create({
-            office_id: office.id,
-            name: firstTag,
-            color: sectionColor,
-            sort_order: sections.length,
-          });
-          qc.invalidateQueries({ queryKey: ['sections', office?.id] });
-        }
-      } else {
-        data.section_header = '';
+    if (data.committee !== undefined && !Array.isArray(data.committee)) {
+      data.committee = data.committee ? [data.committee] : [];
+    }
+    if (data.tags !== undefined && !Array.isArray(data.tags)) {
+      data.tags = data.tags ? [data.tags] : [];
+    }
+    // When priority tag changes, update section_header to match first tag and ensure section exists
+    if (data.tags !== undefined && data.tags.length > 0) {
+      const firstTag = data.tags[0];
+      data.section_header = firstTag;
+      // Ensure section header exists for this priority tag
+      const existingSection = sections.find(s => s.name === firstTag);
+      if (!existingSection) {
+        // Get the color from priority config
+        const priorityConfig = priorityItems.find(i => i.label === firstTag);
+        const sectionColor = priorityConfig?.color ? getSectionColorFromConfig(priorityConfig.color) : getSectionColor(firstTag);
+        await base44.entities.SectionHeader.create({
+          office_id: office.id,
+          name: firstTag,
+          color: sectionColor,
+          sort_order: sections.length,
+        });
+        qc.invalidateQueries({ queryKey: ['sections', office?.id] });
       }
+    } else if (data.tags !== undefined && data.tags.length === 0) {
+      data.section_header = '';
     }
     // Optimistic update — patch local cache immediately, no refetch needed
     qc.setQueryData(['bills', office?.id], (old = []) =>
@@ -327,6 +334,7 @@ export default function Bills() {
             </th>
             <th className="py-2 px-3 font-medium">Bill No.</th>
             <th className="py-2 px-3 font-medium">Priority</th>
+            <th className="py-2 px-3 font-medium">85</th>
             <th className="py-2 px-3 font-medium">Title</th>
             <th className="py-2 px-3 font-medium">Short Name</th>
             <th className="py-2 px-3 font-medium">Senate Sponsor</th>
