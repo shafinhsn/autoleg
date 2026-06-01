@@ -136,8 +136,11 @@ export default function Bills() {
         data.section_header = '';
       }
     }
+    // Optimistic update — patch local cache immediately, no refetch needed
+    qc.setQueryData(['bills', office?.id], (old = []) =>
+      old.map(b => b.id === id ? { ...b, ...data } : b)
+    );
     await base44.entities.Bill.update(id, data);
-    invalidateBills();
   }
 
   async function handleDeleteBill(id, billNumber) {
