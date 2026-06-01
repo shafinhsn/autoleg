@@ -144,16 +144,59 @@ export default function ImportCsv() {
 
     for (const row of validRows) {
       const billNum = String(row.bill_number).trim().toUpperCase();
+      
+      // Build clean billData with proper type conversion
       const billData = {
-        ...row,
-        bill_number: billNum,
         office_id: office.id,
-        tags: row.tags ? (Array.isArray(row.tags) ? row.tags : [String(row.tags)]) : [],
-        latest_status: row.latest_status ? (Array.isArray(row.latest_status) ? row.latest_status : [String(row.latest_status)]) : [],
+        bill_number: billNum,
         chamber: billNum.startsWith('S') ? 'Senate' : 'Assembly',
         session_year: 2026,
-        is_caucus_bill: ['true', 'yes', '1', 'x'].includes(String(row.is_caucus_bill || '').toLowerCase()),
       };
+
+      // Helper to safely add string fields (only if non-empty)
+      function addStringField(field, value) {
+        const val = String(value || '').trim();
+        if (val) billData[field] = val;
+      }
+
+      // Helper to add array fields
+      function addArrayField(field, value) {
+        if (!value) return;
+        const arr = Array.isArray(value) ? value : [String(value)];
+        const filtered = arr.map(v => String(v).trim()).filter(v => v);
+        if (filtered.length > 0) billData[field] = filtered;
+      }
+
+      // String fields
+      addStringField('title', row.title);
+      addStringField('short_name', row.short_name);
+      addStringField('senate_sponsor', row.senate_sponsor);
+      addStringField('assembly_sponsor', row.assembly_sponsor);
+      addStringField('committee', row.committee);
+      addStringField('section_header', row.section_header);
+      addStringField('priority_rank', row.priority_rank);
+      addStringField('pc_contact', row.pc_contact);
+      addStringField('next_steps', row.next_steps);
+      addStringField('session_comments', row.session_comments);
+      addStringField('lobbyist', row.lobbyist);
+      addStringField('bill_documents', row.bill_documents);
+      addStringField('internal_notes', row.internal_notes);
+      addStringField('staff_assignees', row.staff_assignees);
+      addStringField('linked_senate_bill', row.linked_senate_bill);
+      addStringField('google_drive_url', row.google_drive_url);
+      addStringField('hearing_date', row.hearing_date);
+      addStringField('hearing_time', row.hearing_time);
+      addStringField('hearing_location', row.hearing_location);
+
+      // Array fields
+      addArrayField('tags', row.tags);
+      addArrayField('latest_status', row.latest_status);
+
+      // Boolean field
+      if (row.is_caucus_bill !== undefined && row.is_caucus_bill !== '') {
+        billData.is_caucus_bill = ['true', 'yes', '1', 'x'].includes(String(row.is_caucus_bill).toLowerCase());
+      }
+
       try {
         if (existingMap[billNum]) {
           await base44.entities.Bill.update(existingMap[billNum].id, billData);
