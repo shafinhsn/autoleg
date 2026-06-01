@@ -179,9 +179,26 @@ export default function ImportCsv() {
     if (failedBills.length === 0) return;
     setRetrying(true);
     try {
+      // Fetch existing bills to filter out already-imported ones
+      const existingBills = await base44.entities.Bill.filter({ office_id: office.id });
+      const existingBillNums = new Set(existingBills.map(b => b.bill_number?.toUpperCase()));
+      
+      // Only retry bills that don't exist yet
+      const billsToRetry = failedBills.filter(row => {
+        const normalized = normalizeBillNumber(row.bill_number);
+        return normalized && !existingBillNums.has(normalized);
+      });
+      
+      if (billsToRetry.length === 0) {
+        alert('All failed bills have already been imported!');
+        setFailedBills([]);
+        setRetrying(false);
+        return;
+      }
+      
       const response = await base44.functions.invoke('importBillsFromCsv', {
         officeId: office.id,
-        rows: failedBills,
+        rows: billsToRetry,
       });
       setResult({
         created: (result.created || 0) + (response.data.created || 0),
@@ -198,6 +215,19 @@ export default function ImportCsv() {
       alert('Retry failed: ' + (e.message || String(e)));
     }
     setRetrying(false);
+  }
+
+  // Helper to normalize fuzzy bill numbers (same as backend)
+  function normalizeBillNumber(billStr) {
+    if (!billStr) return null;
+    let normalized = String(billStr).trim().toUpperCase();
+    normalized = normalized.replace(/-/g, '');
+    normalized = normalized.replace(/\s+/g, '');
+    const match = normalized.match(/^([AS])(\d+)/);
+    if (match) {
+      return match[1] + match[2];
+    }
+    return null;
   }
 
   function reset() {
@@ -232,12 +262,12 @@ export default function ImportCsv() {
             {failedBills.length > 0 && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="font-semibold text-amber-900">Rate-Limited Bills: {failedBills.length} bills will be imported on retry</p>
+                  <p className="font-semibold text-amber-900">Pending Bills: {failedBills.length} bills need retry</p>
                   <Button size="sm" onClick={handleRetry} disabled={retrying}>
                     {retrying ? 'Retrying...' : `Retry ${failedBills.length} Bills`}
                   </Button>
                 </div>
-                <p className="text-sm text-amber-700">These bills were temporarily rate-limited. Click retry to complete the import.</p>
+                <p className="text-sm text-amber-700">These bills weren't imported (rate-limited or errors). Click retry to complete the import (skips already-imported bills).</p>
               </div>
             )}
             {result.errors > 0 && result.errorDetails && result.errorDetails.length > 0 && (

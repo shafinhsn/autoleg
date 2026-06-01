@@ -216,7 +216,7 @@ Deno.serve(async (req) => {
     }
 
     // Return failed bills for manual retry (don't auto-retry)
-    const failedRows = failedBills.map(f => f.row);
+    const failedRows = failedBills;
 
     return Response.json({ 
       created, 
