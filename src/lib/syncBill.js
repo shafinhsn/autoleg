@@ -24,8 +24,8 @@ export async function syncBill(bill, apiKey) {
   // Title
   if (result.title) updateData.title = result.title;
 
-  // Status
-  if (result.status?.statusDesc) updateData.latest_status = result.status.statusDesc;
+  // Status — stored as array
+  if (result.status?.statusDesc) updateData.latest_status = [result.status.statusDesc];
 
   // Committee
   if (result.status?.committeeName) updateData.committee = result.status.committeeName;
