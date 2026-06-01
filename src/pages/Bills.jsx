@@ -77,10 +77,10 @@ export default function Bills() {
     qc.invalidateQueries({ queryKey: ['bills', office?.id] });
   }
 
-  // Resolve config items — saved config → defaults (never empty)
-  const statusItems = statusConfigs[0]?.items?.length ? statusConfigs[0].items : DEFAULT_STATUSES;
-  const committeeItems = committeeConfigs[0]?.items?.length ? committeeConfigs[0].items : DEFAULT_COMMITTEES;
-  const priorityItems = priorityConfigs[0]?.items?.length ? priorityConfigs[0].items : DEFAULT_PRIORITY_TAGS;
+  // Resolve config items — use saved configs only (empty after clear data)
+  const statusItems = statusConfigs[0]?.items?.length ? statusConfigs[0].items : [];
+  const committeeItems = committeeConfigs[0]?.items?.length ? committeeConfigs[0].items : [];
+  const priorityItems = priorityConfigs[0]?.items?.length ? priorityConfigs[0].items : [];
 
   const uniqueStatuses = statusItems.map(i => i.label);
   const uniqueCommittees = committeeItems.map(i => i.label);
