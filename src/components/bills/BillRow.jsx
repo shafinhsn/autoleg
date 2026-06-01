@@ -225,6 +225,7 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
           <span className="text-muted-foreground/40 text-xs">—</span>
         )}
       </td>
+      <td className="py-2 px-3 max-w-[150px]"><EditableCell field="google_drive_url" value={bill.google_drive_url} /></td>
       <td className="py-2 px-3 text-center">
         {bill.is_caucus_bill ? (
           <span className="text-xs bg-accent/20 text-accent px-1.5 py-0.5 rounded font-medium">Yes</span>
