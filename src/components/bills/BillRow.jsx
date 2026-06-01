@@ -197,6 +197,7 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
       <td className="py-2 px-3 max-w-[120px]"><EditableCell field="next_steps" value={bill.next_steps} /></td>
       <td className="py-2 px-3 max-w-[150px]"><EditableCell field="session_comments" value={bill.session_comments} /></td>
       <td className="py-2 px-3 max-w-[120px]"><EditableCell field="lobbyist" value={bill.lobbyist} /></td>
+      <td className="py-2 px-3 max-w-[100px]"><EditableCell field="section_85" value={bill.section_85} /></td>
       <td className="py-2 px-3">
         {bill.bill_documents ? (
           <span className="text-xs text-primary truncate block max-w-[100px]" title={bill.bill_documents}>{bill.bill_documents}</span>

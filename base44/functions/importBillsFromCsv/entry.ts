@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
       const stringFields = ['title', 'short_name', 'senate_sponsor', 'assembly_sponsor', 'committee', 
         'section_header', 'priority_rank', 'pc_contact', 'next_steps', 'session_comments', 
         'lobbyist', 'bill_documents', 'internal_notes', 'staff_assignees', 'linked_senate_bill', 
-        'google_drive_url', 'hearing_date', 'hearing_time', 'hearing_location'];
+        'google_drive_url', 'hearing_date', 'hearing_time', 'hearing_location', 'section_85'];
       
       stringFields.forEach(field => {
         const val = String(row[field] || '').trim();
