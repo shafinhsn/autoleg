@@ -325,7 +325,13 @@ export default function Bills() {
               const ids = [...selectedBills];
               qc.setQueryData(['bills', office?.id], (old = []) => old.filter(b => !ids.includes(b.id)));
               setSelectedBills(new Set());
-              (async () => { for (const id of ids) await base44.entities.Bill.delete(id); invalidateBills(); })();
+              (async () => {
+                for (const id of ids) {
+                  await base44.entities.Bill.delete(id);
+                  await new Promise(r => setTimeout(r, 80));
+                }
+                invalidateBills();
+              })();
             }}>
               <Trash2 className="w-4 h-4 mr-1.5" /> Delete {selectedBills.size}
             </Button>
