@@ -25,13 +25,24 @@ export function OfficeProvider({ children }) {
     enabled: !!user?.office_id,
   });
 
+  // Role hierarchy:
+  // admin / legislative_director → full admin (can edit, delete, manage settings)
+  // staffer / editor → can edit bills but not manage settings/sections
+  // viewer / user → read-only access
+  const role = user?.role;
+  const isAdmin = role === 'admin' || role === 'legislative_director';
+  const isEditor = isAdmin || role === 'staffer' || role === 'editor';
+  const isViewer = !isEditor; // viewer or plain 'user' role = read-only
+
   const value = {
     user,
     office,
     loading: loading || (!!user?.office_id && officeLoading),
     refetchOffice,
-    isAdmin: user?.role === 'admin' || user?.role === 'legislative_director',
-    isStaff: user?.role === 'user' || user?.role === 'staffer',
+    isAdmin,
+    isEditor,
+    isViewer,
+    isStaff: role === 'staffer' || role === 'user',
     needsSetup: !loading && !!user && !user.office_id,
   };
 

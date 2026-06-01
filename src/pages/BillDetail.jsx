@@ -1,24 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useOffice } from '@/hooks/useOffice';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, Save, MessageSquare, Clock, Newspaper, Loader2 } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Save, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { toast } from '@/components/ui/use-toast';
 import MultiTagSelect from '@/components/bills/MultiTagSelect';
 import { syncBill } from '@/lib/syncBill';
 
 export default function BillDetail() {
-  const urlParams = new URLSearchParams(window.location.search);
   const pathParts = window.location.pathname.split('/');
   const billId = pathParts[pathParts.length - 1];
-  const { office } = useOffice();
+  const { office, isAdmin } = useOffice();
   const qc = useQueryClient();
 
   const [editing, setEditing] = useState(false);
@@ -26,8 +24,6 @@ export default function BillDetail() {
   const [draftTags, setDraftTags] = useState([]);
   const [syncing, setSyncing] = useState(false);
   const [newComment, setNewComment] = useState('');
-  const [news, setNews] = useState([]);
-  const [loadingNews, setLoadingNews] = useState(false);
 
   const { data: bill, isLoading } = useQuery({
     queryKey: ['bill', billId],
@@ -72,18 +68,16 @@ export default function BillDetail() {
   async function handleSave() {
     await base44.entities.Bill.update(bill.id, { ...draft, tags: draftTags });
     qc.invalidateQueries({ queryKey: ['bill', billId] });
-    qc.invalidateQueries({ queryKey: ['bills'] });
+    qc.invalidateQueries({ queryKey: ['bills', office?.id] });
     setEditing(false);
-    toast({ title: 'Bill updated' });
   }
 
   async function handleSync() {
     setSyncing(true);
     const apiKey = office?.senate_api_key || 'tSBEMOLz2kk1HVzenAxZGy64XAMOBJmx';
-    const didUpdate = await syncBill(bill, apiKey);
+    await syncBill(bill, apiKey);
     qc.invalidateQueries({ queryKey: ['bill', billId] });
-    qc.invalidateQueries({ queryKey: ['bills'] });
-    toast({ title: didUpdate ? 'Synced from Senate API' : 'No changes found' });
+    qc.invalidateQueries({ queryKey: ['bills', office?.id] });
     setSyncing(false);
   }
 
@@ -98,38 +92,6 @@ export default function BillDetail() {
     });
     qc.invalidateQueries({ queryKey: ['comments', billId] });
     setNewComment('');
-    toast({ title: 'Comment added' });
-  }
-
-  async function fetchNews() {
-    setLoadingNews(true);
-    const query = `${bill.bill_number}${bill.short_name ? ` "${bill.short_name}"` : ''} New York legislature`;
-    const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `Search for recent news articles about this New York State legislation: ${query}. 
-Bill title: ${bill.title || bill.short_name || bill.bill_number}
-Return up to 6 recent news articles about this bill or related legislation.`,
-      add_context_from_internet: true,
-      response_json_schema: {
-        type: 'object',
-        properties: {
-          articles: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                title: { type: 'string' },
-                description: { type: 'string' },
-                url: { type: 'string' },
-                source: { type: 'object', properties: { name: { type: 'string' } } },
-                publishedAt: { type: 'string' },
-              },
-            },
-          },
-        },
-      },
-    });
-    setNews(result?.articles || []);
-    setLoadingNews(false);
   }
 
   if (isLoading) {
@@ -186,7 +148,7 @@ Return up to 6 recent news articles about this bill or related legislation.`,
               <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>Cancel</Button>
             </>
           ) : (
-            <Button size="sm" onClick={startEdit}>Edit Bill</Button>
+            <Button size="sm" onClick={startEdit} disabled={!isAdmin}>Edit Bill</Button>
           )}
         </div>
       </div>
@@ -209,7 +171,6 @@ Return up to 6 recent news articles about this bill or related legislation.`,
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="comments"><MessageSquare className="w-3.5 h-3.5 mr-1" /> Comments ({comments.length})</TabsTrigger>
-          <TabsTrigger value="news"><Newspaper className="w-3.5 h-3.5 mr-1" /> News</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
@@ -265,32 +226,6 @@ Return up to 6 recent news articles about this bill or related legislation.`,
                     </div>
                     <p className="text-sm">{c.text}</p>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="news" className="mt-4">
-          <Card>
-            <CardContent className="p-6">
-              <Button variant="outline" size="sm" onClick={fetchNews} disabled={loadingNews} className="mb-4">
-                {loadingNews ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Fetching...</> : <><Newspaper className="w-4 h-4 mr-1.5" /> Fetch News</>}
-              </Button>
-              {!office?.news_api_key && (
-                <p className="text-sm text-muted-foreground mb-4">Add your News API key in <Link to="/settings" className="text-primary hover:underline">Settings</Link> to fetch news about this bill.</p>
-              )}
-              <div className="space-y-3">
-                {news.length === 0 && !loadingNews && <p className="text-sm text-muted-foreground text-center py-4">No news articles yet. Click "Fetch News" to search.</p>}
-                {news.map((article, i) => (
-                  <a key={i} href={article.url} target="_blank" rel="noopener noreferrer" className="block p-4 rounded-lg border hover:bg-muted/50 transition-colors">
-                    <h3 className="text-sm font-medium">{article.title}</h3>
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{article.description}</p>
-                    <div className="flex items-center gap-2 mt-2 text-[10px] text-muted-foreground">
-                      <span>{article.source?.name}</span>
-                      <span>{new Date(article.publishedAt).toLocaleDateString()}</span>
-                    </div>
-                  </a>
                 ))}
               </div>
             </CardContent>

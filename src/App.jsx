@@ -1,4 +1,3 @@
-import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
@@ -18,7 +17,7 @@ import TeamChat from '@/pages/TeamChat';
 import Settings from '@/pages/Settings';
 import Customize from '@/pages/Customize';
 import Assignments from '@/pages/Assignments';
-import CalendarPage from '@/pages/CalendarPage';
+
 
 const OfficeApp = () => {
   const { needsSetup, loading } = useOffice();
@@ -48,7 +47,7 @@ const OfficeApp = () => {
         <Route path="/settings" element={<Settings />} />
         <Route path="/customize" element={<Customize />} />
         <Route path="/assignments" element={<Assignments />} />
-        <Route path="/calendar" element={<CalendarPage />} />
+
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
@@ -89,7 +88,7 @@ function App() {
         <Router>
           <AuthenticatedApp />
         </Router>
-        <Toaster />
+
       </QueryClientProvider>
     </AuthProvider>
   )

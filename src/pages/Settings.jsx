@@ -2,12 +2,11 @@ import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useOffice } from '@/hooks/useOffice';
-import { Save, Upload, Key, Palette, Building2 } from 'lucide-react';
+import { Save, Key, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { toast } from '@/components/ui/use-toast';
 
 export default function Settings() {
   const { office, isAdmin, refetchOffice } = useOffice();
@@ -15,17 +14,16 @@ export default function Settings() {
   const [form, setForm] = useState({
     name: '',
     branding_color: '#1e3a5f',
-    news_api_key: '',
     senate_api_key: '',
   });
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (office) {
       setForm({
         name: office.name || '',
         branding_color: office.branding_color || '#1e3a5f',
-        news_api_key: office.news_api_key || '',
         senate_api_key: office.senate_api_key || '',
       });
     }
@@ -36,16 +34,8 @@ export default function Settings() {
     await base44.entities.Office.update(office.id, form);
     refetchOffice();
     setSaving(false);
-    toast({ title: 'Settings saved' });
-  }
-
-  async function handleLogoUpload(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
-    await base44.entities.Office.update(office.id, { logo_url: file_url });
-    refetchOffice();
-    toast({ title: 'Logo updated' });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   }
 
   if (!isAdmin) {
@@ -82,18 +72,6 @@ export default function Settings() {
               <span className="text-sm text-muted-foreground font-mono">{form.branding_color}</span>
             </div>
           </div>
-          <div className="space-y-2">
-            <Label>Office Logo</Label>
-            <div className="flex items-center gap-3">
-              {office?.logo_url && <img src={office.logo_url} alt="Logo" className="w-12 h-12 rounded-lg object-cover" />}
-              <label className="cursor-pointer">
-                <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-                <span className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
-                  <Upload className="w-4 h-4" /> {office?.logo_url ? 'Change Logo' : 'Upload Logo'}
-                </span>
-              </label>
-            </div>
-          </div>
         </CardContent>
       </Card>
 
@@ -114,18 +92,7 @@ export default function Settings() {
             <p className="text-xs text-muted-foreground">
               Used to sync bill data, sponsors, and committee info. Get a key at{' '}
               <a href="https://legislation.nysenate.gov/static/docs/html/index.html" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">legislation.nysenate.gov</a>.
-              A default key is provided but may be rate-limited.
             </p>
-          </div>
-          <div className="space-y-2">
-            <Label>News API Key</Label>
-            <Input
-              type="password"
-              value={form.news_api_key}
-              onChange={e => setForm(f => ({ ...f, news_api_key: e.target.value }))}
-              placeholder="Enter your newsapi.org API key"
-            />
-            <p className="text-xs text-muted-foreground">Get a free key at <a href="https://newsapi.org" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">newsapi.org</a>. Used to fetch news about specific bills.</p>
           </div>
         </CardContent>
       </Card>
@@ -138,7 +105,7 @@ export default function Settings() {
         <CardContent>
           <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
             <p className="font-mono font-bold text-2xl tracking-widest">{office?.invite_code}</p>
-            <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(office?.invite_code || ''); toast({ title: 'Copied!' }); }}>
+            <Button variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(office?.invite_code || '')}>
               Copy
             </Button>
           </div>
@@ -146,7 +113,7 @@ export default function Settings() {
       </Card>
 
       <Button onClick={handleSave} disabled={saving} className="w-full">
-        <Save className="w-4 h-4 mr-1.5" /> {saving ? 'Saving...' : 'Save Settings'}
+        <Save className="w-4 h-4 mr-1.5" /> {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Settings'}
       </Button>
     </div>
   );

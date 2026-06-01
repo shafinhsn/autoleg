@@ -54,6 +54,34 @@ function ColorBadge({ label, colorName, onClick }) {
   );
 }
 
+// Multi-select dropdown for statuses
+function MultiStatusSelect({ currentStatuses, options, onSave, onCancel }) {
+  const [selected, setSelected] = useState(new Set(currentStatuses));
+
+  function toggle(val) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(val) ? next.delete(val) : next.add(val);
+      return next;
+    });
+  }
+
+  return (
+    <div className="absolute z-50 bg-white border rounded-lg shadow-lg p-2 min-w-[180px] max-h-56 overflow-y-auto" style={{ top: '100%', left: 0 }}>
+      {options.map(opt => (
+        <label key={opt} className="flex items-center gap-2 px-2 py-1 hover:bg-muted/50 rounded cursor-pointer text-xs">
+          <input type="checkbox" checked={selected.has(opt)} onChange={() => toggle(opt)} className="rounded" />
+          {opt}
+        </label>
+      ))}
+      <div className="flex gap-1 mt-2 pt-2 border-t">
+        <button onClick={() => onSave([...selected])} className="flex-1 text-xs bg-primary text-white rounded px-2 py-1 hover:bg-primary/90">Save</button>
+        <button onClick={onCancel} className="flex-1 text-xs border rounded px-2 py-1 hover:bg-muted/50">Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 function InlineSelect({ value, options, onSave, onCancel }) {
   const [val, setVal] = useState(value || '');
   return (
@@ -69,7 +97,7 @@ function InlineSelect({ value, options, onSave, onCancel }) {
   );
 }
 
-export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, onToggleSelect, priorityItems, statusItems }) {
+export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, onToggleSelect, priorityItems, statusItems, uniqueStatuses, uniqueCommittees }) {
   const [editingField, setEditingField] = useState(null);
   const [editValue, setEditValue] = useState('');
 
@@ -91,17 +119,21 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
       );
     }
     return (
-      <span onClick={e => { e.preventDefault(); e.stopPropagation(); startEdit(field, value); }}
-        className="cursor-text hover:bg-muted/50 rounded px-1 -mx-1 text-xs" title="Click to edit">
+      <span onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit(field, value); }}
+        className={`cursor-text hover:bg-muted/50 rounded px-1 -mx-1 text-xs ${!isAdmin ? 'cursor-default' : ''}`} title={isAdmin ? "Click to edit" : ""}>
         {value || <span className="text-muted-foreground/40">—</span>}
       </span>
     );
   }
 
-  const statusColorName = statusItems?.find(i => i.label === bill.latest_status)?.color || DEFAULT_STATUS_COLORS[bill.latest_status] || 'Gray';
+  // Normalize statuses — support both string and array
+  const billStatuses = Array.isArray(bill.latest_status)
+    ? bill.latest_status
+    : (bill.latest_status ? [bill.latest_status] : []);
+
   const firstTag = bill.tags?.[0];
   const priorityColorName = priorityItems?.find(i => i.label === firstTag)?.color || DEFAULT_PRIORITY_COLORS[firstTag] || 'Purple';
-  const statusOptions = statusItems?.map(i => i.label) || Object.keys(DEFAULT_STATUS_COLORS);
+  const statusOptions = uniqueStatuses?.length ? uniqueStatuses : (statusItems?.map(i => i.label) || Object.keys(DEFAULT_STATUS_COLORS));
   const priorityOptions = priorityItems?.map(i => i.label) || Object.keys(DEFAULT_PRIORITY_COLORS);
 
   return (
@@ -122,26 +154,41 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
       <td className="py-2 px-3 whitespace-nowrap"><EditableCell field="senate_sponsor" value={bill.senate_sponsor} /></td>
       <td className="py-2 px-3">
         {editingField === 'committee' ? (
-          <InlineSelect value={bill.committee} options={[...new Set(statusOptions)]} onSave={v => commitEdit('committee', v)} onCancel={() => setEditingField(null)} />
+          <InlineSelect value={bill.committee} options={uniqueCommittees || []} onSave={v => commitEdit('committee', v)} onCancel={() => setEditingField(null)} />
         ) : (
-          <span onClick={e => { e.preventDefault(); e.stopPropagation(); startEdit('committee', bill.committee); }}
-            className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border cursor-pointer hover:opacity-80 ${bill.committee ? 'bg-sky-100 text-sky-700 border-sky-200' : 'text-muted-foreground/40'}`}>
+          <span onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('committee', bill.committee); }}
+            className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border ${isAdmin ? 'cursor-pointer hover:opacity-80' : ''} ${bill.committee ? 'bg-sky-100 text-sky-700 border-sky-200' : 'text-muted-foreground/40'}`}>
             {bill.committee || '—'}
           </span>
         )}
       </td>
       <td className="py-2 px-3">
-        {editingField === 'latest_status' ? (
-          <InlineSelect value={bill.latest_status} options={statusOptions} onSave={v => commitEdit('latest_status', v)} onCancel={() => setEditingField(null)} />
-        ) : (
-          <ColorBadge label={bill.latest_status || '—'} colorName={bill.latest_status ? statusColorName : 'Gray'} onClick={() => startEdit('latest_status', bill.latest_status)} />
-        )}
+        <div className="relative">
+          {editingField === 'latest_status' ? (
+            <MultiStatusSelect
+              currentStatuses={billStatuses}
+              options={statusOptions}
+              onSave={v => { onUpdate(bill.id, { latest_status: v }); setEditingField(null); }}
+              onCancel={() => setEditingField(null)}
+            />
+          ) : (
+            <div
+              onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('latest_status', ''); }}
+              className={`flex flex-wrap gap-1 ${isAdmin ? 'cursor-pointer' : ''}`}
+            >
+              {billStatuses.length > 0 ? billStatuses.map(s => {
+                const colorName = statusItems?.find(i => i.label === s)?.color || DEFAULT_STATUS_COLORS[s] || 'Gray';
+                return <ColorBadge key={s} label={s} colorName={colorName} />;
+              }) : <span className="text-muted-foreground/40 text-xs">—</span>}
+            </div>
+          )}
+        </div>
       </td>
       <td className="py-2 px-3">
         {editingField === 'tags' ? (
           <InlineSelect value={firstTag} options={priorityOptions} onSave={v => { commitEdit('tags', v ? [v] : []); }} onCancel={() => setEditingField(null)} />
         ) : (
-          <div onClick={e => { e.preventDefault(); e.stopPropagation(); startEdit('tags', firstTag); }}>
+          <div onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('tags', firstTag); }}>
             {firstTag ? <ColorBadge label={firstTag} colorName={priorityColorName} /> : <span className="text-muted-foreground/40 text-xs cursor-pointer">—</span>}
           </div>
         )}
@@ -153,10 +200,12 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
             <FolderOpen className="w-3 h-3" /> Open
           </a>
         ) : (
-          <span onClick={e => { e.stopPropagation(); startEdit('google_drive_url', ''); }}
-            className="text-muted-foreground/40 hover:text-primary cursor-pointer text-[10px] flex items-center gap-1">
-            <ExternalLink className="w-3 h-3" /> Add
-          </span>
+          isAdmin && (
+            <span onClick={e => { e.stopPropagation(); startEdit('google_drive_url', ''); }}
+              className="text-muted-foreground/40 hover:text-primary cursor-pointer text-[10px] flex items-center gap-1">
+              <ExternalLink className="w-3 h-3" /> Add
+            </span>
+          )
         )}
         {editingField === 'google_drive_url' && (
           <input autoFocus value={editValue} onChange={e => setEditValue(e.target.value)}

@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useOffice } from '@/hooks/useOffice';
 import {
   LayoutDashboard, FileText, Upload, Users, LogOut, Building2,
-  Sliders, ClipboardList, Calendar, Settings
+  Sliders, ClipboardList, Settings
 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 
@@ -10,7 +10,6 @@ const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/bills', label: 'Bill Tracker', icon: FileText },
   { path: '/assignments', label: 'Assignments', icon: ClipboardList },
-  { path: '/calendar', label: 'Calendar', icon: Calendar },
   { path: '/staff', label: 'Staff Directory', icon: Users },
   { path: '/import', label: 'Import CSV', icon: Upload },
   { path: '/customize', label: 'Customize', icon: Sliders },

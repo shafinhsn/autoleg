@@ -5,7 +5,6 @@ import { useOffice } from '@/hooks/useOffice';
 import { Search, Plus, RefreshCw, Upload, Trash2, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { toast } from '@/components/ui/use-toast';
 import SectionHeaderBar from '@/components/bills/SectionHeaderBar';
 import BillRow from '@/components/bills/BillRow.jsx';
 import { getSectionColor } from '@/lib/bill-utils';
@@ -25,41 +24,6 @@ export default function Bills() {
   const [expandedSections, setExpandedSections] = useState(new Set());
   const [syncing, setSyncing] = useState(false);
   const [selectedBills, setSelectedBills] = useState(new Set());
-
-  function handleExportCSV() {
-    const allBills = bills; // export all, not just filtered
-    const headers = [
-      'bill_number', 'short_name', 'title', 'senate_sponsor', 'assembly_sponsor',
-      'committee', 'latest_status', 'section_header', 'tags',
-      'pc_contact', 'next_steps', 'session_comments', 'lobbyist',
-      'bill_documents', 'internal_notes', 'staff_assignees',
-      'linked_senate_bill', 'google_drive_url', 'is_caucus_bill',
-      'chamber', 'session_year', 'hearing_date', 'hearing_time', 'hearing_location',
-    ];
-
-    function escape(val) {
-      if (val === null || val === undefined) return '';
-      const str = Array.isArray(val) ? val.join('; ') : String(val);
-      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    }
-
-    const rows = [headers.join(',')];
-    for (const bill of allBills) {
-      rows.push(headers.map(h => escape(bill[h])).join(','));
-    }
-
-    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `bills-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast({ title: `Exported ${allBills.length} bills` });
-  }
 
   const { data: bills = [], isLoading } = useQuery({
     queryKey: ['bills', office?.id],
@@ -99,11 +63,30 @@ export default function Bills() {
     });
   }
 
+  function invalidateBills() {
+    qc.invalidateQueries({ queryKey: ['bills', office?.id] });
+  }
+
+  // Build unique filter options from all bills — deduplicated globally
+  const uniqueStatuses = [...new Set(bills.flatMap(b => {
+    const s = b.latest_status;
+    if (!s) return [];
+    return Array.isArray(s) ? s : [s];
+  }))].sort();
+
+  const uniqueCommittees = [...new Set(bills.map(b => b.committee).filter(Boolean))].sort();
+
+  const uniquePriorities = priorityConfigs[0]?.items?.map(i => i.label) ||
+    [...new Set(bills.flatMap(b => b.tags || []).filter(Boolean))];
+
   const filtered = bills.filter(b => {
     if (search && !b.bill_number?.toLowerCase().includes(search.toLowerCase()) &&
         !b.title?.toLowerCase().includes(search.toLowerCase()) &&
         !b.short_name?.toLowerCase().includes(search.toLowerCase())) return false;
-    if (filterStatus && b.latest_status !== filterStatus) return false;
+    if (filterStatus) {
+      const statuses = Array.isArray(b.latest_status) ? b.latest_status : (b.latest_status ? [b.latest_status] : []);
+      if (!statuses.includes(filterStatus)) return false;
+    }
     if (filterCommittee && b.committee !== filterCommittee) return false;
     if (filterPriority && !(b.tags || []).includes(filterPriority)) return false;
     return true;
@@ -116,11 +99,6 @@ export default function Bills() {
   }));
   const unsectionedBills = filtered.filter(b => !b.section_header || !sections.find(s => s.name === b.section_header));
 
-  const uniqueStatuses = [...new Set(bills.map(b => b.latest_status).filter(Boolean))].sort();
-  const uniqueCommittees = [...new Set(bills.map(b => b.committee).filter(Boolean))].sort();
-  const uniquePriorities = priorityConfigs[0]?.items?.map(i => i.label) ||
-    [...new Set(bills.flatMap(b => b.tags || []).filter(Boolean))];
-
   async function handleAddBill() {
     if (!newBillNumber.trim()) return;
     await base44.entities.Bill.create({
@@ -130,19 +108,16 @@ export default function Bills() {
       session_year: 2026,
       tags: [],
     });
-    qc.invalidateQueries({ queryKey: ['bills'] });
+    invalidateBills();
     setNewBillNumber('');
     setShowAddForm(false);
-    toast({ title: `Added ${newBillNumber.trim().toUpperCase()}` });
   }
 
   async function handleUpdateBill(id, data) {
-    // If tags changed, auto-assign section_header and ensure section exists
     if (data.tags !== undefined) {
       const firstTag = Array.isArray(data.tags) ? data.tags[0] : data.tags;
       if (firstTag) {
         data.section_header = firstTag;
-        // Create section header if it doesn't exist
         const existingSection = sections.find(s => s.name === firstTag);
         if (!existingSection) {
           await base44.entities.SectionHeader.create({
@@ -151,68 +126,54 @@ export default function Bills() {
             color: getSectionColor(firstTag),
             sort_order: sections.length,
           });
-          qc.invalidateQueries({ queryKey: ['sections'] });
+          qc.invalidateQueries({ queryKey: ['sections', office?.id] });
         }
       } else {
         data.section_header = '';
       }
     }
     await base44.entities.Bill.update(id, data);
-    qc.invalidateQueries({ queryKey: ['bills'] });
+    invalidateBills();
   }
 
   async function handleDeleteBill(id, billNumber) {
     if (!confirm(`Remove ${billNumber} from tracker?`)) return;
-    // Optimistic: remove from cache immediately
     qc.setQueryData(['bills', office?.id], (old = []) => old.filter(b => b.id !== id));
-    base44.entities.Bill.delete(id).then(() => qc.invalidateQueries({ queryKey: ['bills'] }));
-    toast({ title: `Removed ${billNumber}` });
+    base44.entities.Bill.delete(id).then(invalidateBills);
   }
 
   async function handleSync() {
-    if (bills.length === 0) {
-      toast({ title: 'No bills to sync. Add bills first.' });
-      return;
-    }
+    if (bills.length === 0) return;
     setSyncing(true);
-    let updated = 0;
     const apiKey = office?.senate_api_key || 'tSBEMOLz2kk1HVzenAxZGy64XAMOBJmx';
     for (const bill of bills) {
-      try {
-        const didUpdate = await syncBill(bill, apiKey);
-        if (didUpdate) updated++;
-      } catch (e) {
-        console.error(`Failed to sync ${bill.bill_number}:`, e);
-      }
+      try { await syncBill(bill, apiKey); } catch (e) { console.error(`Sync error ${bill.bill_number}`, e); }
     }
-    qc.invalidateQueries({ queryKey: ['bills'] });
+    invalidateBills();
     setSyncing(false);
-    toast({ title: `Synced — ${updated} of ${bills.length} bill${bills.length !== 1 ? 's' : ''} updated` });
   }
 
   async function handleUpdateSection(id, data) {
     await base44.entities.SectionHeader.update(id, data);
-    qc.invalidateQueries({ queryKey: ['sections'] });
+    qc.invalidateQueries({ queryKey: ['sections', office?.id] });
   }
 
   async function handleDeleteSection(id) {
     if (!confirm('Delete this section header?')) return;
     await base44.entities.SectionHeader.delete(id);
-    qc.invalidateQueries({ queryKey: ['sections'] });
+    qc.invalidateQueries({ queryKey: ['sections', office?.id] });
   }
 
   async function addSection() {
     const name = prompt('Section name (e.g. TOP 5 PRIORITY):');
     if (!name?.trim()) return;
     const sectionName = name.trim().toUpperCase();
-    // Create section header
     await base44.entities.SectionHeader.create({
       office_id: office.id,
       name: sectionName,
       color: getSectionColor(sectionName),
       sort_order: sections.length,
     });
-    // Also create a matching priority tag if not already in TrackerConfig
     const existingConfig = await base44.entities.TrackerConfig.filter({ office_id: office.id, config_type: 'priority_tags' });
     if (existingConfig.length > 0) {
       const config = existingConfig[0];
@@ -231,26 +192,18 @@ export default function Bills() {
       });
       qc.invalidateQueries({ queryKey: ['tracker-config'] });
     }
-    qc.invalidateQueries({ queryKey: ['sections'] });
-    toast({ title: `Section "${sectionName}" created` });
+    qc.invalidateQueries({ queryKey: ['sections', office?.id] });
   }
 
   async function handleDragEnd(result) {
-    if (!result.destination) return;
-    const { source, destination } = result;
-    if (source.index === destination.index) return;
-
+    if (!result.destination || result.source.index === result.destination.index) return;
     const reordered = [...sortedSections];
-    const [moved] = reordered.splice(source.index, 1);
-    reordered.splice(destination.index, 0, moved);
-
-    // Optimistic update in cache
+    const [moved] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, moved);
     const updated = reordered.map((s, i) => ({ ...s, sort_order: i }));
     qc.setQueryData(['sections', office?.id], updated);
-
-    // Persist to DB
     await Promise.all(updated.map(s => base44.entities.SectionHeader.update(s.id, { sort_order: s.sort_order })));
-    qc.invalidateQueries({ queryKey: ['sections'] });
+    qc.invalidateQueries({ queryKey: ['sections', office?.id] });
   }
 
   function toggleSelectAll(billsList) {
@@ -260,6 +213,31 @@ export default function Bills() {
       billsList.forEach(b => allSelected ? next.delete(b.id) : next.add(b.id));
       return next;
     });
+  }
+
+  function handleExportCSV() {
+    const headers = [
+      'bill_number', 'short_name', 'title', 'senate_sponsor', 'assembly_sponsor',
+      'committee', 'latest_status', 'section_header', 'tags',
+      'pc_contact', 'next_steps', 'session_comments', 'lobbyist',
+      'bill_documents', 'internal_notes', 'staff_assignees',
+      'linked_senate_bill', 'google_drive_url', 'is_caucus_bill',
+      'chamber', 'session_year', 'hearing_date', 'hearing_time', 'hearing_location',
+    ];
+    function escape(val) {
+      if (val === null || val === undefined) return '';
+      const str = Array.isArray(val) ? val.join('; ') : String(val);
+      return (str.includes(',') || str.includes('"') || str.includes('\n'))
+        ? `"${str.replace(/"/g, '""')}"` : str;
+    }
+    const rows = [headers.join(','), ...bills.map(bill => headers.map(h => escape(bill[h])).join(','))];
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bills-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   const BillTable = ({ bills: tableBills }) => (
@@ -296,6 +274,8 @@ export default function Bills() {
               onToggleSelect={() => setSelectedBills(prev => { const n = new Set(prev); n.has(bill.id) ? n.delete(bill.id) : n.add(bill.id); return n; })}
               priorityItems={priorityConfigs[0]?.items}
               statusItems={statusConfigs[0]?.items}
+              uniqueStatuses={uniqueStatuses}
+              uniqueCommittees={uniqueCommittees}
             />
           ))}
         </tbody>
@@ -329,12 +309,9 @@ export default function Bills() {
             <Button variant="destructive" size="sm" onClick={() => {
               if (!confirm(`Delete ${selectedBills.size} selected bill(s)?`)) return;
               const ids = [...selectedBills];
-              const count = ids.length;
-              // Optimistic: remove from cache immediately
               qc.setQueryData(['bills', office?.id], (old = []) => old.filter(b => !ids.includes(b.id)));
               setSelectedBills(new Set());
-              toast({ title: `Deleted ${count} bill(s)` });
-              Promise.all(ids.map(id => base44.entities.Bill.delete(id))).then(() => qc.invalidateQueries({ queryKey: ['bills'] }));
+              Promise.all(ids.map(id => base44.entities.Bill.delete(id))).then(invalidateBills);
             }}>
               <Trash2 className="w-4 h-4 mr-1.5" /> Delete {selectedBills.size}
             </Button>
@@ -354,7 +331,7 @@ export default function Bills() {
               <Plus className="w-4 h-4 mr-1.5" /> Section
             </Button>
           )}
-          <Button size="sm" onClick={() => setShowAddForm(!showAddForm)}>
+          <Button size="sm" onClick={() => setShowAddForm(!showAddForm)} disabled={!isAdmin}>
             <Plus className="w-4 h-4 mr-1.5" /> Add Bill
           </Button>
         </div>
