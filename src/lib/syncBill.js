@@ -7,7 +7,7 @@ export async function syncBill(bill, apiKey) {
   if (!billNum) return false;
 
   const year = bill.session_year || 2026;
-  const key = apiKey || 'yn35A5fGALcDVU49eCerQgMoWuRgNbWY';
+  const key = apiKey || '5OuWFvXYcEmkPHLLaRPiHDHbVgnamYTL';
   const url = `https://legislation.nysenate.gov/api/3/bills/${year}/${billNum}?key=${key}&view=with_refs`;
 
   const resp = await fetch(url);

@@ -156,7 +156,7 @@ export default function Bills() {
   async function handleSync() {
     if (bills.length === 0) return;
     setSyncing(true);
-    const apiKey = office?.senate_api_key || 'tSBEMOLz2kk1HVzenAxZGy64XAMOBJmx';
+    const apiKey = office?.senate_api_key || '5OuWFvXYcEmkPHLLaRPiHDHbVgnamYTL';
     for (const bill of bills) {
       try {
         const updateData = await syncBill(bill, apiKey);
