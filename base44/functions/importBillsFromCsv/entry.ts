@@ -156,7 +156,7 @@ Deno.serve(async (req) => {
       };
 
       // Add string fields
-      const stringFields = ['title', 'short_name', 'senate_sponsor', 'assembly_sponsor', 'committee', 
+      const stringFields = ['title', 'short_name', 'senate_sponsor', 'assembly_sponsor', 
         'section_header', 'priority_rank', 'pc_contact', 'next_steps', 'session_comments', 
         'lobbyist', 'bill_documents', 'internal_notes', 'staff_assignees', 'linked_senate_bill', 
         'google_drive_url', 'hearing_date', 'hearing_time', 'hearing_location', 'section_85'];
@@ -175,10 +175,9 @@ Deno.serve(async (req) => {
         const tagsVal = row.tags;
         billData.tags = Array.isArray(tagsVal) ? tagsVal : splitMultiValue(tagsVal);
       }
-      if (row.committee) {
-        const committeeVal = row.committee;
-        billData.committee = Array.isArray(committeeVal) ? committeeVal : splitMultiValue(committeeVal);
-      }
+      // Committee field - always set as array (even if empty)
+      const committeeVal = row.committee;
+      billData.committee = committeeVal ? (Array.isArray(committeeVal) ? committeeVal : splitMultiValue(committeeVal)) : [];
 
       // Boolean field
       if (row.is_caucus_bill !== undefined) {
