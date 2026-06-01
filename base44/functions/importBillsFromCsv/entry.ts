@@ -50,11 +50,23 @@ Deno.serve(async (req) => {
     let created = 0, updated = 0, errors = 0;
     const errorDetails = [];
 
-    // Create missing sections first
+    // Extract unique values for tracker configs
+    const uniquePriorities = new Set();
+    const uniqueStatuses = new Set();
+    const uniqueCommittees = new Set();
+
     for (const bill of parsedBills) {
       if (bill.section_header && !existingSectionNames.has(bill.section_header)) {
         newSectionNames.add(bill.section_header);
       }
+      if (bill.priority_rank) uniquePriorities.add(String(bill.priority_rank).trim());
+      if (bill.latest_status) {
+        const statuses = Array.isArray(bill.latest_status) ? bill.latest_status : [bill.latest_status];
+        statuses.forEach(s => {
+          if (s) uniqueStatuses.add(String(s).trim());
+        });
+      }
+      if (bill.committee) uniqueCommittees.add(String(bill.committee).trim());
     }
 
     let sectionOrder = existingSections.length;
@@ -71,6 +83,11 @@ Deno.serve(async (req) => {
         console.error('Failed to create section:', sectionName, e);
       }
     }
+
+    // Create/update tracker configs for Priority Tags, Bill Statuses, and Committees
+    await updateTrackerConfig(base44, officeId, 'priority_tags', Array.from(uniquePriorities));
+    await updateTrackerConfig(base44, officeId, 'bill_statuses', Array.from(uniqueStatuses));
+    await updateTrackerConfig(base44, officeId, 'committees', Array.from(uniqueCommittees));
 
     // Process bills sequentially to avoid rate limits and timeouts
     for (let i = 0; i < parsedBills.length; i++) {
@@ -175,6 +192,8 @@ Deno.serve(async (req) => {
   }
 });
 
+const CONFIG_COLORS = ['Red', 'Orange', 'Amber', 'Yellow', 'Green', 'Emerald', 'Teal', 'Sky', 'Blue', 'Indigo', 'Violet', 'Purple', 'Pink'];
+
 function getSectionColor(name) {
   const colors = {
     'TOP 5 PRIORITY': '#dc2626',
@@ -186,6 +205,45 @@ function getSectionColor(name) {
     'MONITORING': '#6b7280',
   };
   return colors[name] || '#2563eb';
+}
+
+async function updateTrackerConfig(base44, officeId, configType, newLabels) {
+  try {
+    const existing = await base44.asServiceRole.entities.TrackerConfig.filter({ office_id: officeId, config_type: configType });
+    const config = existing[0];
+    
+    const items = [];
+    const existingLabels = new Set(config?.items?.map(i => i.label) || []);
+    
+    // Add existing items
+    config?.items?.forEach(item => {
+      items.push(item);
+    });
+    
+    // Add new labels with auto-assigned colors
+    newLabels.forEach((label, idx) => {
+      if (!existingLabels.has(label)) {
+        const colorIdx = (items.length + idx) % CONFIG_COLORS.length;
+        items.push({
+          label,
+          color: CONFIG_COLORS[colorIdx],
+          sort_order: items.length + idx,
+        });
+      }
+    });
+    
+    if (config) {
+      await base44.asServiceRole.entities.TrackerConfig.update(config.id, { items });
+    } else if (items.length > 0) {
+      await base44.asServiceRole.entities.TrackerConfig.create({
+        office_id: officeId,
+        config_type: configType,
+        items,
+      });
+    }
+  } catch (e) {
+    console.error(`Failed to update tracker config ${configType}:`, e);
+  }
 }
 
 function sleep(ms) {
