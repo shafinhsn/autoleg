@@ -18,69 +18,81 @@ export default function OfficeSetup() {
     if (!officeName.trim()) return;
     setError('');
     setLoading(true);
-    // Check for duplicate office name
-    const existing = await base44.entities.Office.filter({ name: officeName.trim() });
-    if (existing.length > 0) {
-      setError('An office with this name already exists. Please choose a different name.');
+    try {
+      // Check for duplicate office name
+      const existing = await base44.entities.Office.filter({ name: officeName.trim() });
+      if (existing.length > 0) {
+        setError('An office with this name already exists. Please choose a different name.');
+        setLoading(false);
+        return;
+      }
+      const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+      const user = await base44.auth.me();
+      const office = await base44.entities.Office.create({
+        name: officeName.trim(),
+        owner_email: user.email,
+        invite_code: code,
+        branding_color: brandingColor,
+      });
+      await base44.auth.updateMe({ office_id: office.id, role: 'admin' });
+      
+      // Create user record in staff directory
+      await base44.entities.User.create({
+        email: user.email,
+        full_name: user.full_name,
+        office_id: office.id,
+        role: 'admin',
+        is_active: true,
+      });
+      
+      window.location.reload();
+    } catch (e) {
+      console.error('Error creating office:', e);
+      setError(e.message || 'Failed to create office.');
       setLoading(false);
-      return;
     }
-    const code = Math.random().toString(36).substring(2, 10).toUpperCase();
-    const user = await base44.auth.me();
-    const office = await base44.entities.Office.create({
-      name: officeName.trim(),
-      owner_email: user.email,
-      invite_code: code,
-      branding_color: brandingColor,
-    });
-    await base44.auth.updateMe({ office_id: office.id, role: 'admin' });
-    
-    // Create user record in staff directory
-    await base44.entities.User.create({
-      email: user.email,
-      full_name: user.full_name,
-      office_id: office.id,
-      role: 'admin',
-      is_active: true,
-    });
-    
-    window.location.reload();
   }
 
   async function handleJoin() {
     if (!inviteCode.trim()) return;
     setLoading(true);
-    const offices = await base44.entities.Office.filter({ invite_code: inviteCode.trim().toUpperCase() });
-    if (offices.length === 0) {
+    try {
+      const offices = await base44.entities.Office.filter({ invite_code: inviteCode.trim().toUpperCase() });
+      if (offices.length === 0) {
+        setLoading(false);
+        alert('Invalid invite code. Please check and try again.');
+        return;
+      }
+      const office = offices[0];
+      const user = await base44.auth.me();
+      
+      // Update user's office assignment
+      await base44.auth.updateMe({ office_id: office.id, role: 'staffer' });
+      
+      // Also update the user record in the database
+      const userRecord = await base44.entities.User.filter({ email: user.email });
+      if (userRecord.length > 0) {
+        await base44.entities.User.update(userRecord[0].id, { 
+          office_id: office.id, 
+          role: 'staffer',
+          is_active: true 
+        });
+      } else {
+        await base44.entities.User.create({
+          email: user.email,
+          full_name: user.full_name,
+          office_id: office.id,
+          role: 'staffer',
+          is_active: true,
+        });
+      }
+      
+      window.location.reload();
+    } catch (e) {
+      console.error('Error joining office:', e);
+      alert(e.message || 'Failed to join office.');
       setLoading(false);
-      alert('Invalid invite code. Please check and try again.');
-      return;
     }
-    const office = offices[0];
-    const user = await base44.auth.me();
-    
-    // Update user's office assignment
-    await base44.auth.updateMe({ office_id: office.id, role: 'staffer' });
-    
-    // Also update the user record in the database
-    const userRecord = await base44.entities.User.filter({ email: user.email });
-    if (userRecord.length > 0) {
-      await base44.entities.User.update(userRecord[0].id, { 
-        office_id: office.id, 
-        role: 'staffer',
-        is_active: true 
-      });
-    } else {
-      await base44.entities.User.create({
-        email: user.email,
-        full_name: user.full_name,
-        office_id: office.id,
-        role: 'staffer',
-        is_active: true,
-      });
-    }
-    
-    window.location.reload();
   }
 
   return (
