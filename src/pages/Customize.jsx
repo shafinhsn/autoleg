@@ -235,15 +235,15 @@ export default function Customize() {
           <TabsContent value="bill_statuses">
             <ConfigTab
               configType="bill_statuses"
-              defaultItems={DEFAULT_STATUSES}
-              description="Bill status options shown in the Status column. Color-coded badges."
+              defaultItems={[]}
+              description="Bill status options shown in the Status column. Color-coded badges. Populated from CSV imports."
             />
           </TabsContent>
           <TabsContent value="committees">
             <ConfigTab
               configType="committees"
-              defaultItems={DEFAULT_COMMITTEES}
-              description="Committee options for filtering and display in the tracker."
+              defaultItems={[]}
+              description="Committee options for filtering and display in the tracker. Populated from CSV imports."
             />
           </TabsContent>
           <TabsContent value="tags">

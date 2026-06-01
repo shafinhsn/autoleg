@@ -128,6 +128,10 @@ export default function ImportCsv() {
       if (!row.section_header && currentSection) {
         row.section_header = currentSection;
       }
+      // Use priority_rank (from '85' column) as section_header if no section detected
+      if (!row.section_header && row.priority_rank) {
+        row.section_header = row.priority_rank.trim();
+      }
       // If no tags mapped, use section_header as tag
       if (!row.tags && row.section_header) {
         row.tags = row.section_header;

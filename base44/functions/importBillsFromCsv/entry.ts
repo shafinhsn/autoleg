@@ -50,6 +50,14 @@ Deno.serve(async (req) => {
     let created = 0, updated = 0, errors = 0;
     const errorDetails = [];
 
+    // Helper to split multi-value fields by comma or semicolon
+    function splitMultiValue(val) {
+      if (!val) return [];
+      const str = String(val);
+      // Split by comma or semicolon, trim whitespace, filter empty
+      return str.split(/[;,]/).map(s => s.trim()).filter(s => s.length > 0);
+    }
+
     // Extract unique values for tracker configs
     const uniquePriorities = new Set();
     const uniqueStatuses = new Set();
@@ -63,16 +71,24 @@ Deno.serve(async (req) => {
         uniquePriorities.add(String(bill.section_header).trim());
       }
       if (bill.latest_status) {
-        const statuses = Array.isArray(bill.latest_status) ? bill.latest_status : [bill.latest_status];
-        statuses.forEach(s => {
-          if (s) uniqueStatuses.add(String(s).trim());
+        // Split multi-value status fields
+        const statusValues = Array.isArray(bill.latest_status) ? bill.latest_status : splitMultiValue(bill.latest_status);
+        statusValues.forEach(s => {
+          if (s) uniqueStatuses.add(s);
         });
       }
-      if (bill.committee) uniqueCommittees.add(String(bill.committee).trim());
+      if (bill.committee) {
+        // Split multi-value committee fields
+        const committeeValues = Array.isArray(bill.committee) ? bill.committee : splitMultiValue(bill.committee);
+        committeeValues.forEach(c => {
+          if (c) uniqueCommittees.add(c);
+        });
+      }
       if (bill.tags) {
-        const tags = Array.isArray(bill.tags) ? bill.tags : [bill.tags];
-        tags.forEach(t => {
-          if (t) uniqueTags.add(String(t).trim());
+        // Split multi-value tag fields
+        const tagValues = Array.isArray(bill.tags) ? bill.tags : splitMultiValue(bill.tags);
+        tagValues.forEach(t => {
+          if (t) uniqueTags.add(t);
         });
       }
     }
@@ -136,12 +152,18 @@ Deno.serve(async (req) => {
         if (val) billData[field] = val;
       });
 
-      // Add array fields
+      // Add array fields - split multi-value fields by comma/semicolon
       if (row.latest_status) {
-        billData.latest_status = Array.isArray(row.latest_status) ? row.latest_status : [row.latest_status];
+        const statusVal = row.latest_status;
+        billData.latest_status = Array.isArray(statusVal) ? statusVal : splitMultiValue(statusVal);
       }
       if (row.tags) {
-        billData.tags = Array.isArray(row.tags) ? row.tags : [row.tags];
+        const tagsVal = row.tags;
+        billData.tags = Array.isArray(tagsVal) ? tagsVal : splitMultiValue(tagsVal);
+      }
+      if (row.committee) {
+        const committeeVal = row.committee;
+        billData.committee = Array.isArray(committeeVal) ? committeeVal : splitMultiValue(committeeVal);
       }
 
       // Boolean field
