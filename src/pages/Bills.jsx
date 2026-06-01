@@ -167,8 +167,13 @@ export default function Bills() {
 
   async function handleDeleteSection(id) {
     if (!confirm('Delete this section header?')) return;
-    await base44.entities.SectionHeader.delete(id);
-    qc.invalidateQueries({ queryKey: ['sections', office?.id] });
+    // Optimistically remove from cache immediately
+    qc.setQueryData(['sections', office?.id], (old = []) => old.filter(s => s.id !== id));
+    try {
+      await base44.entities.SectionHeader.delete(id);
+    } catch (e) {
+      // Already deleted or not found — cache is already clean, nothing to do
+    }
   }
 
   async function addSection() {
