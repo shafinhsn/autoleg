@@ -69,9 +69,9 @@ export default function OfficeSetup() {
       const user = await base44.auth.me();
       console.log('Current user:', user);
       
-      // Update user's office assignment
+      // Update user's office assignment (only office_id, not role — users can't change their own role)
       console.log('Updating user auth with office_id:', office.id);
-      await base44.auth.updateMe({ office_id: office.id, role: 'staffer' });
+      await base44.auth.updateMe({ office_id: office.id });
       
       // Also update the user record in the database
       const userRecord = await base44.entities.User.filter({ email: user.email });
