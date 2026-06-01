@@ -7,19 +7,29 @@ export function detectSectionTag(value) {
   if (!v) return null;
   
   // Check for exact section headers from user's spreadsheets
-  if (v.includes("END OF SESSION") && v.includes("WATCHLIST")) return "END OF SESSION WATCHLIST";
-  if (v.includes("2026 ACTIVE BILLS")) return "2026 ACTIVE BILLS";
-  if (v.includes("2026 BILLS") && v.includes("FINAL BUDGET")) return "2026 FINAL BUDGET";
+  if (v.includes("END OF SESSION") || (v.includes("SESSION") && v.includes("WATCHLIST"))) return "END OF SESSION WATCHLIST";
   if (v.includes("TOP 5 PRIORITY") && v.includes("ROUND 1")) return "TOP 5 PRIORITY ROUND 1";
   if (v.includes("TOP 5 PRIORITY") && v.includes("ROUND 2")) return "TOP 5 PRIORITY ROUND 2";
-  if (v.includes("TOP 10 PRIORITY")) return "TOP 10 PRIORITY";
   if (v.includes("TOP 5 PRIORITY")) return "TOP 5 PRIORITY";
+  if (v.includes("TOP 10 PRIORITY") && v.includes("ROUND 2")) return "TOP 10 PRIORITY ROUND 2";
+  if (v.includes("TOP 10 PRIORITY")) return "TOP 10 PRIORITY";
+  if (v.includes("2026 ACTIVE BILLS") && v.includes("PASSED ASSEMBLY")) return "2026 PASSED ASSEMBLY";
+  if (v.includes("2026 ACTIVE BILLS")) return "2026 ACTIVE BILLS";
+  if (v.includes("2026 BILLS") && v.includes("BUDGET")) return "2026 BUDGET";
+  if (v.includes("2026 BILLS") && v.includes("FINAL BUDGET")) return "2026 FINAL BUDGET";
   if (v.includes("PRIORITY BILLS") && v.includes("ROUND 1")) return "TOP 5 PRIORITY ROUND 1";
-  if (v.includes("PRIORITY BILLS") && v.includes("ROUND 2")) return "TOP 10 PRIORITY";
+  if (v.includes("PRIORITY BILLS") && v.includes("ROUND 2")) return "TOP 10 PRIORITY ROUND 2";
   if (v.includes("PRIORITY BILLS") && v.includes("ROUND 3")) return "ROUND 3 PRIORITY";
+  if (v.includes("TIER 2") || (v.includes("TEIR 2"))) return "TIER 2 PRIORITY";
+  if (v.includes("POST SESSION")) return "POST SESSION";
   if (v.includes("POST BUDGET")) return "POST BUDGET";
+  if (v.includes("LOCAL GOVERNMENT")) return "LOCAL GOVERNMENT";
+  if (v.includes("NEW BILLS") && !v.includes("LOCAL")) return "NEW BILLS";
+  if (v.includes("LEGACY")) return "LEGACY BILLS";
+  if (v.includes("DEAD") || v.includes("ENACTED") || v.includes("STATEMENT")) return "DEAD ENACTED STATEMENT";
   if (v.includes("FINAL BUDGET")) return "2026 FINAL BUDGET";
   if (v.includes("BUDGET")) return "BUDGET";
+  if (v.includes("PASSED ASSEMBLY")) return "PASSED ASSEMBLY";
   if (v.includes("PASSED")) return "PASSED";
   if (v.includes("ACTIVE")) return "ACTIVE";
   if (v.includes("MONITOR")) return "MONITORING";
@@ -98,15 +108,26 @@ export const SECTION_COLORS = {
   "TOP 5 PRIORITY ROUND 1": "#dc2626",
   "TOP 5 PRIORITY ROUND 2": "#dc2626",
   "TOP 10 PRIORITY": "#2563eb",
+  "TOP 10 PRIORITY ROUND 2": "#3b82f6",
   "2026 ACTIVE BILLS": "#16a34a",
+  "2026 PASSED ASSEMBLY": "#16a34a",
+  "2026 BUDGET": "#d97706",
   "2026 FINAL BUDGET": "#d97706",
   "END OF SESSION WATCHLIST": "#7c3aed",
   "ACTIVE": "#16a34a",
   "PASSED": "#7c3aed",
+  "PASSED ASSEMBLY": "#16a34a",
   "BUDGET": "#d97706",
   "POST BUDGET": "#ea580c",
+  "POST SESSION": "#f59e0b",
+  "TIER 2 PRIORITY": "#8b5cf6",
+  "LEGACY BILLS": "#6b7280",
+  "NEW BILLS": "#06b6d4",
+  "LOCAL GOVERNMENT": "#14b8a6",
+  "DEAD ENACTED STATEMENT": "#6b7280",
   "MONITORING": "#6b7280",
   "CAUCUS BILLS": "#0891b2",
+  "ROUND 3 PRIORITY": "#f97316",
 };
 
 export function getSectionColor(name) {
