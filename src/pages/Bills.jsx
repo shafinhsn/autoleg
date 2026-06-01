@@ -214,7 +214,9 @@ export default function Bills() {
     reordered.splice(result.destination.index, 0, moved);
     const updated = reordered.map((s, i) => ({ ...s, sort_order: i }));
     qc.setQueryData(['sections', office?.id], updated);
-    await Promise.all(updated.map(s => base44.entities.SectionHeader.update(s.id, { sort_order: s.sort_order })));
+    for (const s of updated) {
+      await base44.entities.SectionHeader.update(s.id, { sort_order: s.sort_order });
+    }
     qc.invalidateQueries({ queryKey: ['sections', office?.id] });
   }
 
@@ -323,7 +325,7 @@ export default function Bills() {
               const ids = [...selectedBills];
               qc.setQueryData(['bills', office?.id], (old = []) => old.filter(b => !ids.includes(b.id)));
               setSelectedBills(new Set());
-              Promise.all(ids.map(id => base44.entities.Bill.delete(id))).then(invalidateBills);
+              (async () => { for (const id of ids) await base44.entities.Bill.delete(id); invalidateBills(); })();
             }}>
               <Trash2 className="w-4 h-4 mr-1.5" /> Delete {selectedBills.size}
             </Button>
