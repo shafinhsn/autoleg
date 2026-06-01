@@ -83,7 +83,8 @@ export default function Bills() {
 
   const uniqueStatuses = statusItems.map(i => i.label);
   const uniqueCommittees = committeeItems.map(i => i.label);
-  const uniquePriorities = priorityItems.map(i => i.label);
+  // Use section headers for the priority filter dropdown
+  const uniquePriorities = sections.map(s => s.name);
 
   const filtered = bills.filter(b => {
     if (search && !b.bill_number?.toLowerCase().includes(search.toLowerCase()) &&
