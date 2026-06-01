@@ -157,12 +157,17 @@ export default function Bills() {
     if (bills.length === 0) return;
     setSyncing(true);
     const apiKey = office?.senate_api_key || '5OuWFvXYcEmkPHLLaRPiHDHbVgnamYTL';
-    for (const bill of bills) {
-      try {
-        const updateData = await syncBill(bill, apiKey);
-        if (updateData) await base44.entities.Bill.update(bill.id, updateData);
-        await new Promise(r => setTimeout(r, 150));
-      } catch (e) { console.error(`Sync error ${bill.bill_number}`, e); }
+    // Process in batches of 5 concurrently to balance speed vs rate limits
+    const batchSize = 5;
+    for (let i = 0; i < bills.length; i += batchSize) {
+      const batch = bills.slice(i, i + batchSize);
+      await Promise.all(batch.map(async bill => {
+        try {
+          const updateData = await syncBill(bill, apiKey);
+          if (updateData) await base44.entities.Bill.update(bill.id, updateData);
+        } catch (e) { console.error(`Sync error ${bill.bill_number}`, e); }
+      }));
+      if (i + batchSize < bills.length) await new Promise(r => setTimeout(r, 100));
     }
     invalidateBills();
     setSyncing(false);
@@ -335,10 +340,7 @@ export default function Bills() {
               qc.setQueryData(['bills', office?.id], (old = []) => old.filter(b => !ids.includes(b.id)));
               setSelectedBills(new Set());
               (async () => {
-                for (const id of ids) {
-                  await base44.entities.Bill.delete(id);
-                  await new Promise(r => setTimeout(r, 80));
-                }
+                await Promise.all(ids.map(id => base44.entities.Bill.delete(id)));
                 invalidateBills();
               })();
             }}>
