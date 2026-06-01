@@ -10,7 +10,7 @@ Deno.serve(async (req) => {
 
     const { rows, officeId, csvData } = await req.json();
     
-    console.log('Import request:', { officeId, rowsCount: rows?.length, hasCsvData: !!csvData });
+    console.log('Import request:', { officeId, rowsCount: rows?.length });
     
     if (!officeId) {
       return Response.json({ error: 'Missing officeId' }, { status: 400 });
@@ -30,6 +30,7 @@ Deno.serve(async (req) => {
     }
 
     const parsedBills = rows;
+    console.log(`Starting import of ${parsedBills.length} bills for office ${officeId}`);
     
     if (parsedBills.length === 0) {
       return Response.json({ error: 'No valid bill rows found in CSV' }, { status: 400 });
@@ -58,110 +59,94 @@ Deno.serve(async (req) => {
 
     let sectionOrder = existingSections.length;
     for (const sectionName of newSectionNames) {
-      await base44.asServiceRole.entities.SectionHeader.create({
-        office_id: officeId,
-        name: sectionName,
-        color: getSectionColor(sectionName),
-        sort_order: sectionOrder++,
-      });
-      await sleep(100); // Rate limit
-    }
-
-    // Process bills in batches with delays and progress tracking
-    const batchSize = 3; // Smaller batch to avoid rate limits
-    const totalBatches = Math.ceil(parsedBills.length / batchSize);
-    let processedBatches = 0;
-    
-    for (let i = 0; i < parsedBills.length; i += batchSize) {
-      const batch = parsedBills.slice(i, i + batchSize);
-      processedBatches++;
-      
-      await Promise.all(batch.map(async (row) => {
-        const billNum = String(row.bill_number || '').trim().toUpperCase();
-        if (!billNum || !/^[AS]\d+$/.test(billNum)) {
-          errors++;
-          errorDetails.push({ bill: billNum || 'unknown', error: 'Invalid bill number format' });
-          return;
-        }
-
-        const billData = {
+      try {
+        await base44.asServiceRole.entities.SectionHeader.create({
           office_id: officeId,
-          bill_number: billNum,
-          chamber: billNum.startsWith('S') ? 'Senate' : 'Assembly',
-          session_year: 2026,
-        };
-
-        // Add string fields
-        const stringFields = ['title', 'short_name', 'senate_sponsor', 'assembly_sponsor', 'committee', 
-          'section_header', 'priority_rank', 'pc_contact', 'next_steps', 'session_comments', 
-          'lobbyist', 'bill_documents', 'internal_notes', 'staff_assignees', 'linked_senate_bill', 
-          'google_drive_url', 'hearing_date', 'hearing_time', 'hearing_location'];
-        
-        stringFields.forEach(field => {
-          const val = String(row[field] || '').trim();
-          if (val) billData[field] = val;
+          name: sectionName,
+          color: getSectionColor(sectionName),
+          sort_order: sectionOrder++,
         });
-
-        // Add array fields
-        if (row.latest_status) {
-          billData.latest_status = Array.isArray(row.latest_status) ? row.latest_status : [row.latest_status];
-        }
-        if (row.tags) {
-          billData.tags = Array.isArray(row.tags) ? row.tags : [row.tags];
-        }
-
-        // Boolean field
-        if (row.is_caucus_bill !== undefined) {
-          billData.is_caucus_bill = ['true', 'yes', '1', 'x'].includes(String(row.is_caucus_bill).toLowerCase());
-        }
-
-        // Ensure section_header matches first tag if available
-        if (!billData.section_header && billData.tags?.length > 0) {
-          billData.section_header = billData.tags[0];
-        }
-
-        try {
-          if (existingMap[billNum]) {
-            await base44.asServiceRole.entities.Bill.update(existingMap[billNum].id, billData);
-            updated++;
-          } else {
-            await base44.asServiceRole.entities.Bill.create(billData);
-            created++;
-          }
-        } catch (e) {
-          errors++;
-          errorDetails.push({ bill: billNum, error: e.message || String(e) });
-        }
-      }));
-
-      // Log progress
-      const percent = Math.round((processedBatches / totalBatches) * 100);
-      console.log(`Import progress: ${processedBatches}/${totalBatches} batches (${percent}%)`);
-
-      // Delay between batches to respect rate limits
-      if (i + batchSize < parsedBills.length) {
-        await sleep(500); // 500ms delay between batches
+        await sleep(100);
+      } catch (e) {
+        console.error('Failed to create section:', sectionName, e);
       }
     }
 
-    const estimatedTimePerBatch = 0.5; // seconds
-    const totalEstimatedSeconds = totalBatches * estimatedTimePerBatch;
-    const totalEstimatedMinutes = Math.ceil(totalEstimatedSeconds / 60);
+    // Process bills sequentially to avoid rate limits and timeouts
+    for (let i = 0; i < parsedBills.length; i++) {
+      const row = parsedBills[i];
+      const billNum = String(row.bill_number || '').trim().toUpperCase();
+      
+      if (!billNum || !/^[AS]\d+$/.test(billNum)) {
+        errors++;
+        errorDetails.push({ bill: row.bill_number || 'unknown', error: 'Invalid bill number format' });
+        continue;
+      }
+
+      const billData = {
+        office_id: officeId,
+        bill_number: billNum,
+        chamber: billNum.startsWith('S') ? 'Senate' : 'Assembly',
+        session_year: 2026,
+      };
+
+      // Add string fields
+      const stringFields = ['title', 'short_name', 'senate_sponsor', 'assembly_sponsor', 'committee', 
+        'section_header', 'priority_rank', 'pc_contact', 'next_steps', 'session_comments', 
+        'lobbyist', 'bill_documents', 'internal_notes', 'staff_assignees', 'linked_senate_bill', 
+        'google_drive_url', 'hearing_date', 'hearing_time', 'hearing_location'];
+      
+      stringFields.forEach(field => {
+        const val = String(row[field] || '').trim();
+        if (val) billData[field] = val;
+      });
+
+      // Add array fields
+      if (row.latest_status) {
+        billData.latest_status = Array.isArray(row.latest_status) ? row.latest_status : [row.latest_status];
+      }
+      if (row.tags) {
+        billData.tags = Array.isArray(row.tags) ? row.tags : [row.tags];
+      }
+
+      // Boolean field
+      if (row.is_caucus_bill !== undefined) {
+        billData.is_caucus_bill = ['true', 'yes', '1', 'x'].includes(String(row.is_caucus_bill).toLowerCase());
+      }
+
+      // Ensure section_header matches first tag if available
+      if (!billData.section_header && billData.tags?.length > 0) {
+        billData.section_header = billData.tags[0];
+      }
+
+      try {
+        if (existingMap[billNum]) {
+          await base44.asServiceRole.entities.Bill.update(existingMap[billNum].id, billData);
+          updated++;
+        } else {
+          await base44.asServiceRole.entities.Bill.create(billData);
+          created++;
+        }
+      } catch (e) {
+        errors++;
+        errorDetails.push({ bill: billNum, error: e.message || String(e) });
+      }
+
+      // Small delay between each bill to respect rate limits
+      if (i < parsedBills.length - 1) {
+        await sleep(100);
+      }
+    }
 
     return Response.json({ 
       created, 
       updated, 
       errors, 
       errorDetails: errorDetails.slice(0, 100),
-      progress: {
-        total: parsedBills.length,
-        processed: parsedBills.length,
-        percent: 100,
-        estimatedTimeMinutes: totalEstimatedMinutes,
-      },
     });
   } catch (error) {
-    return Response.json({ error: error.message }, { status: 500 });
+    console.error('Import failed:', error);
+    return Response.json({ error: error.message || 'Import failed' }, { status: 500 });
   }
 });
 
