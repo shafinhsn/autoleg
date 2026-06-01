@@ -133,8 +133,13 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
 
   const firstTag = bill.tags?.[0];
   const priorityColorName = priorityItems?.find(i => i.label === firstTag)?.color || DEFAULT_PRIORITY_COLORS[firstTag] || 'Purple';
-  const statusOptions = uniqueStatuses?.length ? uniqueStatuses : (statusItems?.map(i => i.label) || Object.keys(DEFAULT_STATUS_COLORS));
-  const priorityOptions = priorityItems?.map(i => i.label) || Object.keys(DEFAULT_PRIORITY_COLORS);
+  // Always prefer Customize-tab configs; fall back to bill data or defaults only if none configured
+  const statusOptions = statusItems?.length
+    ? statusItems.map(i => i.label)
+    : (uniqueStatuses?.length ? uniqueStatuses : Object.keys(DEFAULT_STATUS_COLORS));
+  const priorityOptions = priorityItems?.length
+    ? priorityItems.map(i => i.label)
+    : Object.keys(DEFAULT_PRIORITY_COLORS);
 
   return (
     <tr className={`border-b border-border/50 hover:bg-muted/20 transition-colors text-xs ${selected ? 'bg-blue-50/50' : ''}`}>

@@ -76,8 +76,9 @@ export default function Bills() {
 
   const uniqueCommittees = [...new Set(bills.map(b => b.committee).filter(Boolean))].sort();
 
-  const uniquePriorities = priorityConfigs[0]?.items?.map(i => i.label) ||
-    [...new Set(bills.flatMap(b => b.tags || []).filter(Boolean))];
+  const uniquePriorities = priorityConfigs[0]?.items?.length
+    ? priorityConfigs[0].items.map(i => i.label)
+    : [...new Set(bills.flatMap(b => b.tags || []).filter(Boolean))];
 
   const filtered = bills.filter(b => {
     if (search && !b.bill_number?.toLowerCase().includes(search.toLowerCase()) &&
