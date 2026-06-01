@@ -56,17 +56,10 @@ Deno.serve(async (req) => {
     const uniqueCommittees = new Set();
 
     for (const bill of parsedBills) {
+      // Only extract priority tags from section headers
       if (bill.section_header && !existingSectionNames.has(bill.section_header)) {
         newSectionNames.add(bill.section_header);
-        // Only add to priorities if it's a section header
         uniquePriorities.add(String(bill.section_header).trim());
-      }
-      // Also extract tags if they match section headers
-      if (bill.tags) {
-        const tags = Array.isArray(bill.tags) ? bill.tags : [bill.tags];
-        tags.forEach(t => {
-          if (t) uniquePriorities.add(String(t).trim());
-        });
       }
       if (bill.latest_status) {
         const statuses = Array.isArray(bill.latest_status) ? bill.latest_status : [bill.latest_status];
