@@ -32,6 +32,8 @@ export async function syncBill(bill, apiKey) {
   updateData.title = result.title || bill.title || '';
   updateData.latest_status = result.status?.statusDesc ? [result.status.statusDesc] : [];
   updateData.committee = result.status?.committeeName || '';
+  
+  console.log(`${billNum} API status:`, JSON.stringify(result.status, null, 2));
 
   // Primary sponsor of this bill
   const sponsorMember = result.sponsor?.member;
