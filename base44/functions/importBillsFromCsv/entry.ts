@@ -97,6 +97,9 @@ Deno.serve(async (req) => {
     await updateTrackerConfig(base44, officeId, 'bill_statuses', Array.from(uniqueStatuses));
     await updateTrackerConfig(base44, officeId, 'committees', Array.from(uniqueCommittees));
 
+    // Collect failed bills for retry
+    const failedBills = [];
+
     // Process bills sequentially to avoid rate limits and timeouts
     for (let i = 0; i < parsedBills.length; i++) {
       const row = parsedBills[i];
@@ -159,25 +162,12 @@ Deno.serve(async (req) => {
           created++;
         }
       } catch (e) {
-        errors++;
-        // Check if it's a rate limit error and retry once
         const errorMsg = e.message || String(e);
-        if (errorMsg.includes('rate limit') && i < parsedBills.length - 1) {
-          await sleep(500); // Wait longer on rate limit
-          try {
-            if (existingMap[billNum]) {
-              await base44.asServiceRole.entities.Bill.update(existingMap[billNum].id, billData);
-              updated++;
-              errorDetails.pop(); // Remove the rate limit error
-            } else {
-              await base44.asServiceRole.entities.Bill.create(billData);
-              created++;
-              errorDetails.pop(); // Remove the rate limit error
-            }
-          } catch (retryError) {
-            errorDetails.push({ bill: billNum, error: retryError.message || String(retryError) });
-          }
+        // Check if it's a rate limit error - add to retry queue
+        if (errorMsg.includes('rate limit') || errorMsg.includes('too many requests') || errorMsg.includes('429')) {
+          failedBills.push({ row, billNum, billData });
         } else {
+          errors++;
           errorDetails.push({ bill: billNum, error: errorMsg });
         }
       }
@@ -185,6 +175,28 @@ Deno.serve(async (req) => {
       // Small delay between each bill to avoid rate limits
       if (i < parsedBills.length - 1) {
         await sleep(200);
+      }
+    }
+
+    // Retry failed bills after waiting
+    if (failedBills.length > 0) {
+      console.log(`Retrying ${failedBills.length} failed bills after rate limit...`);
+      await sleep(2000); // Wait 2 seconds before retry
+      
+      for (const { row, billNum, billData } of failedBills) {
+        try {
+          if (existingMap[billNum]) {
+            await base44.asServiceRole.entities.Bill.update(existingMap[billNum].id, billData);
+            updated++;
+          } else {
+            await base44.asServiceRole.entities.Bill.create(billData);
+            created++;
+          }
+        } catch (retryError) {
+          errors++;
+          errorDetails.push({ bill: billNum, error: retryError.message || String(retryError) });
+        }
+        await sleep(500); // Longer delay between retries
       }
     }
 
