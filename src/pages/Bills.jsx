@@ -25,6 +25,7 @@ export default function Bills() {
   const [expandedSections, setExpandedSections] = useState(new Set());
   const [syncing, setSyncing] = useState(false);
   const [selectedBills, setSelectedBills] = useState(new Set());
+  const [deleteResult, setDeleteResult] = useState(null);
 
   const { data: bills = [], isLoading } = useQuery({
     queryKey: ['bills', office?.id],
@@ -338,15 +339,23 @@ export default function Bills() {
         </select>
         <div className="ml-auto flex items-center gap-2">
           {selectedBills.size > 0 && (
-            <Button variant="destructive" size="sm" onClick={() => {
+            <Button variant="destructive" size="sm" onClick={async () => {
               if (!confirm(`Delete ${selectedBills.size} selected bill(s)?`)) return;
               const ids = [...selectedBills];
-              qc.setQueryData(['bills', office?.id], (old = []) => old.filter(b => !ids.includes(b.id)));
-              setSelectedBills(new Set());
-              (async () => {
-                await Promise.all(ids.map(id => base44.entities.Bill.delete(id)));
+              try {
+                const response = await base44.functions.invoke('bulkDeleteBills', {
+                  billIds: ids,
+                  officeId: office.id,
+                });
+                if (response.data.errors > 0) {
+                  alert(`Deleted ${response.data.deleted} bills. ${response.data.errors} errors occurred.`);
+                }
                 invalidateBills();
-              })();
+              } catch (e) {
+                console.error('Bulk delete error', e);
+                alert('Error deleting bills: ' + e.message);
+              }
+              setSelectedBills(new Set());
             }}>
               <Trash2 className="w-4 h-4 mr-1.5" /> Delete {selectedBills.size}
             </Button>

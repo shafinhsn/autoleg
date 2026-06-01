@@ -123,99 +123,18 @@ export default function ImportCsv() {
     }
 
     setImporting(true);
-    let created = 0, updated = 0, errors = 0;
-    const errorDetails = [];
-
-    // Create missing section headers
-    const existingSections = await base44.entities.SectionHeader.filter({ office_id: office.id });
-    const existingNames = new Set(existingSections.map(s => s.name));
-    const newSectionNames = [...new Set(validRows.map(r => r.section_header).filter(Boolean))].filter(n => !existingNames.has(n));
-    for (let i = 0; i < newSectionNames.length; i++) {
-      await base44.entities.SectionHeader.create({
+    try {
+      const response = await base44.functions.invoke('importBillsFromCsv', {
         office_id: office.id,
-        name: newSectionNames[i],
-        color: getSectionColor(newSectionNames[i]),
-        sort_order: existingSections.length + i,
+        rows: validRows,
       });
+      setResult(response.data);
+      qc.invalidateQueries({ queryKey: ['bills'] });
+      qc.invalidateQueries({ queryKey: ['sections'] });
+    } catch (e) {
+      console.error('Import error', e);
+      setResult({ created: 0, updated: 0, errors: 1, errorDetails: [{ bill: 'N/A', error: e.message || String(e) }] });
     }
-
-    const existingBills = await base44.entities.Bill.filter({ office_id: office.id });
-    const existingMap = {};
-    existingBills.forEach(b => { existingMap[b.bill_number?.toUpperCase()] = b; });
-
-    for (const row of validRows) {
-      const billNum = String(row.bill_number).trim().toUpperCase();
-      
-      // Build clean billData with proper type conversion
-      const billData = {
-        office_id: office.id,
-        bill_number: billNum,
-        chamber: billNum.startsWith('S') ? 'Senate' : 'Assembly',
-        session_year: 2026,
-      };
-
-      // Helper to safely add string fields (only if non-empty)
-      function addStringField(field, value) {
-        const val = String(value || '').trim();
-        if (val) billData[field] = val;
-      }
-
-      // Helper to add array fields
-      function addArrayField(field, value) {
-        if (!value) return;
-        const arr = Array.isArray(value) ? value : [String(value)];
-        const filtered = arr.map(v => String(v).trim()).filter(v => v);
-        if (filtered.length > 0) billData[field] = filtered;
-      }
-
-      // String fields
-      addStringField('title', row.title);
-      addStringField('short_name', row.short_name);
-      addStringField('senate_sponsor', row.senate_sponsor);
-      addStringField('assembly_sponsor', row.assembly_sponsor);
-      addStringField('committee', row.committee);
-      addStringField('section_header', row.section_header);
-      addStringField('priority_rank', row.priority_rank);
-      addStringField('pc_contact', row.pc_contact);
-      addStringField('next_steps', row.next_steps);
-      addStringField('session_comments', row.session_comments);
-      addStringField('lobbyist', row.lobbyist);
-      addStringField('bill_documents', row.bill_documents);
-      addStringField('internal_notes', row.internal_notes);
-      addStringField('staff_assignees', row.staff_assignees);
-      addStringField('linked_senate_bill', row.linked_senate_bill);
-      addStringField('google_drive_url', row.google_drive_url);
-      addStringField('hearing_date', row.hearing_date);
-      addStringField('hearing_time', row.hearing_time);
-      addStringField('hearing_location', row.hearing_location);
-
-      // Array fields
-      addArrayField('tags', row.tags);
-      addArrayField('latest_status', row.latest_status);
-
-      // Boolean field
-      if (row.is_caucus_bill !== undefined && row.is_caucus_bill !== '') {
-        billData.is_caucus_bill = ['true', 'yes', '1', 'x'].includes(String(row.is_caucus_bill).toLowerCase());
-      }
-
-      try {
-        if (existingMap[billNum]) {
-          await base44.entities.Bill.update(existingMap[billNum].id, billData);
-          updated++;
-        } else {
-          await base44.entities.Bill.create(billData);
-          created++;
-        }
-      } catch (e) {
-        console.error('Import error', billNum, e);
-        errors++;
-        errorDetails.push({ bill: billNum, error: e.message || String(e) });
-      }
-    }
-
-    setResult({ created, updated, errors, errorDetails });
-    qc.invalidateQueries({ queryKey: ['bills'] });
-    qc.invalidateQueries({ queryKey: ['sections'] });
     setImporting(false);
   }
 
