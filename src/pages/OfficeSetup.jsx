@@ -57,27 +57,34 @@ export default function OfficeSetup() {
     if (!inviteCode.trim()) return;
     setLoading(true);
     try {
+      console.log('Joining office with code:', inviteCode);
       const offices = await base44.entities.Office.filter({ invite_code: inviteCode.trim().toUpperCase() });
+      console.log('Found offices:', offices);
       if (offices.length === 0) {
         setLoading(false);
-        alert('Invalid invite code. Please check and try again.');
+        setError('Invalid invite code. Please check and try again.');
         return;
       }
       const office = offices[0];
       const user = await base44.auth.me();
+      console.log('Current user:', user);
       
       // Update user's office assignment
+      console.log('Updating user auth with office_id:', office.id);
       await base44.auth.updateMe({ office_id: office.id, role: 'staffer' });
       
       // Also update the user record in the database
       const userRecord = await base44.entities.User.filter({ email: user.email });
+      console.log('Found user records:', userRecord);
       if (userRecord.length > 0) {
+        console.log('Updating existing user record');
         await base44.entities.User.update(userRecord[0].id, { 
           office_id: office.id, 
           role: 'staffer',
           is_active: true 
         });
       } else {
+        console.log('Creating new user record');
         await base44.entities.User.create({
           email: user.email,
           full_name: user.full_name,
@@ -87,10 +94,11 @@ export default function OfficeSetup() {
         });
       }
       
+      console.log('Join complete, reloading...');
       window.location.reload();
     } catch (e) {
       console.error('Error joining office:', e);
-      alert(e.message || 'Failed to join office.');
+      setError(e.message || 'Failed to join office.');
       setLoading(false);
     }
   }
@@ -195,8 +203,11 @@ export default function OfficeSetup() {
                 maxLength={8}
               />
             </div>
+            {error && mode === 'join' && (
+              <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>
+            )}
             <div className="flex gap-3 pt-2">
-              <Button variant="outline" onClick={() => setMode(null)} disabled={loading}>Back</Button>
+              <Button variant="outline" onClick={() => { setMode(null); setError(''); }} disabled={loading}>Back</Button>
               <Button onClick={handleJoin} disabled={loading || !inviteCode.trim()} className="flex-1">
                 {loading ? 'Joining...' : 'Join Office'}
               </Button>
