@@ -59,7 +59,15 @@ Deno.serve(async (req) => {
       if (bill.section_header && !existingSectionNames.has(bill.section_header)) {
         newSectionNames.add(bill.section_header);
       }
+      // Extract from priority_rank field
       if (bill.priority_rank) uniquePriorities.add(String(bill.priority_rank).trim());
+      // Also extract from tags array
+      if (bill.tags) {
+        const tags = Array.isArray(bill.tags) ? bill.tags : [bill.tags];
+        tags.forEach(t => {
+          if (t) uniquePriorities.add(String(t).trim());
+        });
+      }
       if (bill.latest_status) {
         const statuses = Array.isArray(bill.latest_status) ? bill.latest_status : [bill.latest_status];
         statuses.forEach(s => {
