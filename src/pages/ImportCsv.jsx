@@ -35,8 +35,8 @@ export default function ImportCsv() {
     { value: 'latest_status', label: 'Status' },
     { value: 'tags', label: 'Tags' },
     { value: 'section_header', label: 'Section / Category' },
-    { value: 'priority_rank', label: 'Priority Tag' },
-    { value: 'section_85', label: '85' },
+    { value: 'priority_rank', label: 'Priority Tag / Section Header' },
+    { value: 'section_85', label: 'Section 85 Comments' },
     { value: 'pc_contact', label: 'P&C Contact' },
     { value: 'next_steps', label: 'Next Steps' },
     { value: 'session_comments', label: 'Session Comments' },
@@ -223,21 +223,25 @@ export default function ImportCsv() {
                 <CheckCircle2 className="w-6 h-6 text-green-600" />
                 <div>
                   <p className="font-semibold text-green-900">Import Complete</p>
-                  <p className="text-sm text-green-700">{result.created} new · {result.updated} updated{result.errors > 0 ? ` · ${result.errors} errors` : ''}</p>
+                  <p className="text-sm text-green-700">{result.created} new · {result.updated} updated{result.errors > 0 ? ` · ${result.errors} errors` : ''}{failedBills.length > 0 ? ` · ${failedBills.length} pending retry` : ''}</p>
                 </div>
               </div>
               <Button variant="outline" size="sm" onClick={reset}>Import Another</Button>
             </div>
+            {failedBills.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-semibold text-amber-900">Rate-Limited Bills: {failedBills.length} bills will be imported on retry</p>
+                  <Button size="sm" onClick={handleRetry} disabled={retrying}>
+                    {retrying ? 'Retrying...' : `Retry ${failedBills.length} Bills`}
+                  </Button>
+                </div>
+                <p className="text-sm text-amber-700">These bills were temporarily rate-limited. Click retry to complete the import.</p>
+              </div>
+            )}
             {result.errors > 0 && result.errorDetails && result.errorDetails.length > 0 && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 max-h-64 overflow-auto">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="font-semibold text-red-900">Error Details:</p>
-                  {failedBills.length > 0 && (
-                    <Button size="sm" onClick={handleRetry} disabled={retrying}>
-                      {retrying ? 'Retrying...' : `Retry ${failedBills.length} Bills`}
-                    </Button>
-                  )}
-                </div>
+                <p className="font-semibold text-red-900 mb-2">Error Details:</p>
                 <ul className="text-sm text-red-800 space-y-1">
                   {result.errorDetails.slice(0, 50).map((err, i) => (
                     <li key={i} className="flex gap-2">
