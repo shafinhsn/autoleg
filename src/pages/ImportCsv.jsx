@@ -31,6 +31,7 @@ export default function ImportCsv() {
     { value: 'assembly_sponsor', label: 'Assembly Sponsor' },
     { value: 'committee', label: 'Committee' },
     { value: 'latest_status', label: 'Status' },
+    { value: 'tags', label: 'Tags' },
     { value: 'section_header', label: 'Section / Category' },
     { value: 'priority_rank', label: 'Priority Rank' },
     { value: 'section_85', label: '85' },
