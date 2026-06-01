@@ -25,13 +25,9 @@ export default function Sidebar() {
       {/* Office Branding */}
       <div className="p-5 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
-          {office?.logo_url ? (
-            <img src={office.logo_url} alt="Logo" className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
-          ) : (
-            <div className="w-9 h-9 rounded-lg bg-sidebar-primary flex items-center justify-center flex-shrink-0">
-              <Building2 className="w-5 h-5 text-sidebar-primary-foreground" />
-            </div>
-          )}
+          <div className="w-9 h-9 rounded-lg bg-sidebar-primary flex items-center justify-center flex-shrink-0">
+            <Building2 className="w-5 h-5 text-sidebar-primary-foreground" />
+          </div>
           <div className="min-w-0">
             <p className="text-xs text-sidebar-foreground/50 font-medium uppercase tracking-wide">NYS Assembly</p>
             <p className="text-sm font-semibold truncate">{office?.name || 'Bill Tracker 2026'}</p>

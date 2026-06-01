@@ -19,14 +19,6 @@
       "default": "#1e3a5f",
       "description": "Primary branding color"
     },
-    "logo_url": {
-      "type": "string",
-      "description": "Office logo URL"
-    },
-    "news_api_key": {
-      "type": "string",
-      "description": "News API key"
-    },
     "senate_api_key": {
       "type": "string",
       "description": "NY Senate Open Legislation API key"
