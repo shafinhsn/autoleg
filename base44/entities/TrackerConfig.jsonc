@@ -11,7 +11,8 @@
       "enum": [
         "priority_tags",
         "bill_statuses",
-        "committees"
+        "committees",
+        "tags"
       ],
       "description": "Type of configuration"
     },

@@ -33,7 +33,7 @@ export default function ImportCsv() {
     { value: 'latest_status', label: 'Status' },
     { value: 'tags', label: 'Tags' },
     { value: 'section_header', label: 'Section / Category' },
-    { value: 'priority_rank', label: 'Priority Rank' },
+    { value: 'priority_rank', label: 'Priority Tag' },
     { value: 'section_85', label: '85' },
     { value: 'pc_contact', label: 'P&C Contact' },
     { value: 'next_steps', label: 'Next Steps' },

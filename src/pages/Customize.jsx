@@ -221,6 +221,7 @@ export default function Customize() {
           <TabsTrigger value="priority_tags">Priority Tags</TabsTrigger>
           <TabsTrigger value="bill_statuses">Bill Statuses</TabsTrigger>
           <TabsTrigger value="committees">Committees</TabsTrigger>
+          <TabsTrigger value="tags">Tags</TabsTrigger>
         </TabsList>
 
         <div className="mt-4 bg-white border rounded-xl p-6">
@@ -243,6 +244,13 @@ export default function Customize() {
               configType="committees"
               defaultItems={DEFAULT_COMMITTEES}
               description="Committee options for filtering and display in the tracker."
+            />
+          </TabsContent>
+          <TabsContent value="tags">
+            <ConfigTab
+              configType="tags"
+              defaultItems={[]}
+              description="Custom tags for bills. Add labels to categorize and filter bills."
             />
           </TabsContent>
         </div>

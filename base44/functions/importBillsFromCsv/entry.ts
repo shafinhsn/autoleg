@@ -54,6 +54,7 @@ Deno.serve(async (req) => {
     const uniquePriorities = new Set();
     const uniqueStatuses = new Set();
     const uniqueCommittees = new Set();
+    const uniqueTags = new Set();
 
     for (const bill of parsedBills) {
       // Only extract priority tags from section headers
@@ -68,6 +69,12 @@ Deno.serve(async (req) => {
         });
       }
       if (bill.committee) uniqueCommittees.add(String(bill.committee).trim());
+      if (bill.tags) {
+        const tags = Array.isArray(bill.tags) ? bill.tags : [bill.tags];
+        tags.forEach(t => {
+          if (t) uniqueTags.add(String(t).trim());
+        });
+      }
     }
 
     let sectionOrder = existingSections.length;
@@ -85,10 +92,11 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Create/update tracker configs for Priority Tags, Bill Statuses, and Committees
+    // Create/update tracker configs for Priority Tags, Bill Statuses, Committees, and Tags
     await updateTrackerConfig(base44, officeId, 'priority_tags', Array.from(uniquePriorities));
     await updateTrackerConfig(base44, officeId, 'bill_statuses', Array.from(uniqueStatuses));
     await updateTrackerConfig(base44, officeId, 'committees', Array.from(uniqueCommittees));
+    await updateTrackerConfig(base44, officeId, 'tags', Array.from(uniqueTags));
 
     // Collect failed bills for retry
     const failedBills = [];
