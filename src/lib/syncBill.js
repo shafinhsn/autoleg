@@ -12,12 +12,14 @@ export async function syncBill(bill, apiKey) {
 
   console.log(`Syncing ${billNum} (${year})...`);
   const resp = await fetch(url);
+  console.log(`API response for ${billNum}: ${resp.status}`);
   if (!resp.ok) {
     console.error(`API error for ${billNum}: ${resp.status}`);
     return null;
   }
 
   const json = await resp.json();
+  console.log(`API response for ${billNum}:`, JSON.stringify(json).substring(0, 200) + '...');
   const result = json?.result;
   if (!result) {
     console.error(`No result for ${billNum}`);
