@@ -5,26 +5,33 @@ export const BILL_NUMBER_RE = /^[ASas]\d+/;
 export function detectSectionTag(value) {
   const v = value.trim().toUpperCase().replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
   if (!v) return null;
-  // Order matters: check TOP 5 before TOP 10
-  if (/\bTOP\s*5\b/.test(v) || /\bTOP\s*FIVE\b/.test(v)) return "TOP 5 PRIORITY";
-  if (/\bTOP\s*10\b/.test(v) || /\bTOP\s*TEN\b/.test(v)) return "TOP 10 PRIORITY";
-  if (/\bPRIORITY\b/.test(v) && /\bROUND\b/.test(v)) {
-    // e.g. "PRIORITY BILLS ROUND 3" — use the full detected context
-    if (/\bROUND\s*1\b/.test(v)) return "TOP 5 PRIORITY";
-    if (/\bROUND\s*2\b/.test(v)) return "TOP 10 PRIORITY";
-    if (/\bROUND\s*3\b/.test(v)) return "ROUND 3 PRIORITY";
-  }
-  if (/\bPOST\s*BUDGET\b/.test(v)) return "POST BUDGET";
-  if (/\bBUDGET\b/.test(v)) return "BUDGET";
-  if (/\bPASSED\b/.test(v)) return "PASSED";
-  if (/\bACTIVE\b/.test(v)) return "ACTIVE";
-  if (/\bMONITOR/.test(v)) return "MONITORING";
-  if (/\bCAUCUS\b/.test(v)) return "CAUCUS BILLS";
+  
+  // Check for exact section headers from user's spreadsheets
+  if (v.includes("END OF SESSION") && v.includes("WATCHLIST")) return "END OF SESSION WATCHLIST";
+  if (v.includes("2026 ACTIVE BILLS")) return "2026 ACTIVE BILLS";
+  if (v.includes("2026 BILLS") && v.includes("FINAL BUDGET")) return "2026 FINAL BUDGET";
+  if (v.includes("TOP 5 PRIORITY") && v.includes("ROUND 1")) return "TOP 5 PRIORITY ROUND 1";
+  if (v.includes("TOP 5 PRIORITY") && v.includes("ROUND 2")) return "TOP 5 PRIORITY ROUND 2";
+  if (v.includes("TOP 10 PRIORITY")) return "TOP 10 PRIORITY";
+  if (v.includes("TOP 5 PRIORITY")) return "TOP 5 PRIORITY";
+  if (v.includes("PRIORITY BILLS") && v.includes("ROUND 1")) return "TOP 5 PRIORITY ROUND 1";
+  if (v.includes("PRIORITY BILLS") && v.includes("ROUND 2")) return "TOP 10 PRIORITY";
+  if (v.includes("PRIORITY BILLS") && v.includes("ROUND 3")) return "ROUND 3 PRIORITY";
+  if (v.includes("POST BUDGET")) return "POST BUDGET";
+  if (v.includes("FINAL BUDGET")) return "2026 FINAL BUDGET";
+  if (v.includes("BUDGET")) return "BUDGET";
+  if (v.includes("PASSED")) return "PASSED";
+  if (v.includes("ACTIVE")) return "ACTIVE";
+  if (v.includes("MONITOR")) return "MONITORING";
+  if (v.includes("CAUCUS")) return "CAUCUS BILLS";
+  if (v.includes("WATCHLIST")) return "END OF SESSION WATCHLIST";
+  
   return null;
 }
 
-// CSV column auto-mapping
+// CSV column auto-mapping (1-to-1 mapping for user's spreadsheets)
 export const COLUMN_MAP = {
+  "85": "priority_rank",
   "number": "bill_number",
   "bill number": "bill_number",
   "bill no": "bill_number",
@@ -58,6 +65,7 @@ export const COLUMN_MAP = {
   "2026 session comments": "session_comments",
   "session comments": "session_comments",
   "comments": "session_comments",
+  " comments": "session_comments",
   "notes": "session_comments",
   "lobbyist / advocate": "lobbyist",
   "lobbyist/advocate": "lobbyist",
@@ -82,13 +90,17 @@ export const COLUMN_MAP = {
   "caucus bill": "is_caucus_bill",
   "caucus": "is_caucus_bill",
   "bill push actions": "skip",
-  "comments": "session_comments",
-  " comments": "session_comments",
+  "bill push actions ": "skip",
 };
 
 export const SECTION_COLORS = {
   "TOP 5 PRIORITY": "#dc2626",
+  "TOP 5 PRIORITY ROUND 1": "#dc2626",
+  "TOP 5 PRIORITY ROUND 2": "#dc2626",
   "TOP 10 PRIORITY": "#2563eb",
+  "2026 ACTIVE BILLS": "#16a34a",
+  "2026 FINAL BUDGET": "#d97706",
+  "END OF SESSION WATCHLIST": "#7c3aed",
   "ACTIVE": "#16a34a",
   "PASSED": "#7c3aed",
   "BUDGET": "#d97706",

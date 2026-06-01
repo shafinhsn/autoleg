@@ -124,6 +124,7 @@ export default function ImportCsv() {
 
     setImporting(true);
     let created = 0, updated = 0, errors = 0;
+    const errorDetails = [];
 
     // Create missing section headers
     const existingSections = await base44.entities.SectionHeader.filter({ office_id: office.id });
@@ -208,10 +209,11 @@ export default function ImportCsv() {
       } catch (e) {
         console.error('Import error', billNum, e);
         errors++;
+        errorDetails.push({ bill: billNum, error: e.message || String(e) });
       }
     }
 
-    setResult({ created, updated, errors });
+    setResult({ created, updated, errors, errorDetails });
     qc.invalidateQueries({ queryKey: ['bills'] });
     qc.invalidateQueries({ queryKey: ['sections'] });
     setImporting(false);
@@ -235,15 +237,33 @@ export default function ImportCsv() {
 
       {result && (
         <Card className="border-green-200 bg-green-50">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-6 h-6 text-green-600" />
-              <div>
-                <p className="font-semibold text-green-900">Import Complete</p>
-                <p className="text-sm text-green-700">{result.created} new · {result.updated} updated{result.errors > 0 ? ` · ${result.errors} errors` : ''}</p>
+          <CardContent className="p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="w-6 h-6 text-green-600" />
+                <div>
+                  <p className="font-semibold text-green-900">Import Complete</p>
+                  <p className="text-sm text-green-700">{result.created} new · {result.updated} updated{result.errors > 0 ? ` · ${result.errors} errors` : ''}</p>
+                </div>
               </div>
+              <Button variant="outline" size="sm" onClick={reset}>Import Another</Button>
             </div>
-            <Button variant="outline" size="sm" onClick={reset}>Import Another</Button>
+            {result.errors > 0 && result.errorDetails && result.errorDetails.length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 max-h-64 overflow-auto">
+                <p className="font-semibold text-red-900 mb-2">Error Details:</p>
+                <ul className="text-sm text-red-800 space-y-1">
+                  {result.errorDetails.slice(0, 50).map((err, i) => (
+                    <li key={i} className="flex gap-2">
+                      <span className="font-mono">{err.bill}:</span>
+                      <span>{err.error}</span>
+                    </li>
+                  ))}
+                </ul>
+                {result.errorDetails.length > 50 && (
+                  <p className="text-xs text-red-600 mt-2">...and {result.errorDetails.length - 50} more errors</p>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
