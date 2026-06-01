@@ -164,6 +164,7 @@ export default function ImportCsv() {
       const billData = {
         ...row, bill_number: billNum, office_id: office.id,
         tags: row.tags ? (Array.isArray(row.tags) ? row.tags : [row.tags]) : [],
+        latest_status: row.latest_status ? (Array.isArray(row.latest_status) ? row.latest_status : [row.latest_status]) : [],
         chamber: billNum.startsWith('S') ? 'Senate' : 'Assembly',
         session_year: 2026,
         is_caucus_bill: ['true','yes','1','x'].includes((row.is_caucus_bill || '').toLowerCase()),

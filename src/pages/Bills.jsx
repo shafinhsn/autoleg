@@ -114,6 +114,10 @@ export default function Bills() {
   }
 
   async function handleUpdateBill(id, data) {
+    // Ensure latest_status is always an array
+    if (data.latest_status !== undefined && !Array.isArray(data.latest_status)) {
+      data.latest_status = data.latest_status ? [data.latest_status] : [];
+    }
     if (data.tags !== undefined) {
       const firstTag = Array.isArray(data.tags) ? data.tags[0] : data.tags;
       if (firstTag) {

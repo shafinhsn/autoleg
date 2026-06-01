@@ -31,8 +31,11 @@
       "description": "Committee the bill is assigned to"
     },
     "latest_status": {
-      "type": "string",
-      "description": "Current status of the bill"
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Current status tags of the bill (array)"
     },
     "tags": {
       "type": "array",
