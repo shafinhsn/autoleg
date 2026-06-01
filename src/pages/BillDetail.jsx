@@ -75,7 +75,8 @@ export default function BillDetail() {
   async function handleSync() {
     setSyncing(true);
     const apiKey = office?.senate_api_key || 'tSBEMOLz2kk1HVzenAxZGy64XAMOBJmx';
-    await syncBill(bill, apiKey);
+    const updateData = await syncBill(bill, apiKey);
+    if (updateData) await base44.entities.Bill.update(bill.id, updateData);
     qc.invalidateQueries({ queryKey: ['bill', billId] });
     qc.invalidateQueries({ queryKey: ['bills', office?.id] });
     setSyncing(false);
