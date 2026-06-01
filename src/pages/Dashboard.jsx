@@ -42,10 +42,9 @@ export default function Dashboard() {
     enabled: !!office?.id,
   });
 
-  const inCommittee = bills.filter(b => b.latest_status?.toLowerCase().includes('committee')).length;
-  const passed = bills.filter(b =>
-    b.latest_status?.toLowerCase().includes('passed') || b.latest_status?.toLowerCase().includes('signed')
-  ).length;
+  const statusText = (b) => (Array.isArray(b.latest_status) ? b.latest_status : [b.latest_status || '']).join(' ').toLowerCase();
+  const inCommittee = bills.filter(b => statusText(b).includes('committee')).length;
+  const passed = bills.filter(b => statusText(b).includes('passed') || statusText(b).includes('signed')).length;
   const priorityBills = bills.filter(b => b.tags?.length > 0).length;
 
   const committeeMap = {};
@@ -53,7 +52,10 @@ export default function Dashboard() {
   const committeeData = Object.entries(committeeMap).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([name, count]) => ({ name, count }));
 
   const statusMap = {};
-  bills.forEach(b => { const s = b.latest_status || 'Unknown'; statusMap[s] = (statusMap[s] || 0) + 1; });
+  bills.forEach(b => {
+    const statuses = Array.isArray(b.latest_status) ? b.latest_status : (b.latest_status ? [b.latest_status] : ['Unknown']);
+    statuses.forEach(s => { statusMap[s] = (statusMap[s] || 0) + 1; });
+  });
   const statusData = Object.entries(statusMap).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value }));
 
   const recentBills = [...bills].sort((a, b) => new Date(b.updated_date) - new Date(a.updated_date)).slice(0, 8);
@@ -166,7 +168,7 @@ export default function Dashboard() {
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0 ml-3">
                     {bill.tags?.length > 0 && <span className="text-[11px] px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">{bill.tags[0]}</span>}
-                    {bill.latest_status && <span className="text-[11px] text-muted-foreground">{bill.latest_status}</span>}
+                    {bill.latest_status?.length > 0 && <span className="text-[11px] text-muted-foreground">{Array.isArray(bill.latest_status) ? bill.latest_status[0] : bill.latest_status}</span>}
                   </div>
                 </Link>
               ))}
