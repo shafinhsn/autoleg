@@ -13,7 +13,6 @@ const ROLES = [
   { value: 'legislative_director', label: 'Legislative Director', icon: Crown, color: 'text-amber-600 bg-amber-50' },
   { value: 'staffer', label: 'General Staffer', icon: UserCheck, color: 'text-blue-600 bg-blue-50' },
   { value: 'intern', label: 'Intern', icon: GraduationCap, color: 'text-emerald-600 bg-emerald-50' },
-  // 'user' is the default platform role assigned on join-via-code; treated as unassigned staffer
   { value: 'user', label: 'Unassigned (New)', icon: UserCheck, color: 'text-gray-600 bg-gray-50' },
 ];
 
@@ -34,6 +33,16 @@ export default function StaffDirectory() {
     enabled: !!office?.id,
   });
 
+  // Get all users to find pending invites (invited but not yet joined)
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ['all-users'],
+    queryFn: () => base44.entities.User.list(),
+    enabled: isAdmin,
+  });
+
+  // Show pending invites (users without office_id but with is_active=false)
+  const pendingInvites = isAdmin ? allUsers.filter(u => !u.office_id && u.is_active === false && u.email) : [];
+
   async function handleRoleChange(member, newRole) {
     await base44.entities.User.update(member.id, { role: newRole });
     qc.invalidateQueries({ queryKey: ['staff'] });
@@ -44,15 +53,42 @@ export default function StaffDirectory() {
     if (!confirm(`Remove ${member.full_name || member.email} from this office? They will no longer have access.`)) return;
     await base44.entities.User.update(member.id, { office_id: '', is_active: false });
     qc.invalidateQueries({ queryKey: ['staff'] });
+    qc.invalidateQueries({ queryKey: ['all-users'] });
     toast({ title: `Removed ${member.full_name || member.email}` });
+  }
+
+  async function handleCancelInvite(invite) {
+    if (!confirm(`Cancel invite for ${invite.email}?`)) return;
+    await base44.entities.User.delete(invite.id);
+    qc.invalidateQueries({ queryKey: ['all-users'] });
+    toast({ title: 'Invite cancelled' });
   }
 
   async function handleInvite() {
     if (!inviteEmail.trim()) return;
     setInviting(true);
     try {
+      // Check if user already exists
+      const existingUsers = await base44.entities.User.filter({ email: inviteEmail.trim() });
+      if (existingUsers.length > 0 && existingUsers[0].office_id) {
+        toast({ title: 'User already in office', description: `${inviteEmail} is already a member.`, variant: 'destructive' });
+        setInviting(false);
+        return;
+      }
+      
       // Invite the user to the platform (sends login email)
-      await base44.users.inviteUser(inviteEmail.trim(), inviteRole === 'admin' ? 'admin' : 'user');
+      await base44.users.inviteUser(inviteEmail.trim(), 'user');
+      
+      // If user record doesn't exist, create a pending invite record
+      if (existingUsers.length === 0) {
+        await base44.entities.User.create({
+          email: inviteEmail.trim(),
+          role: 'user',
+          is_active: false,
+          office_id: null,
+        });
+      }
+      
       // Also send them the office invite code so they know how to join
       await base44.integrations.Core.SendEmail({
         to: inviteEmail.trim(),
@@ -66,6 +102,7 @@ export default function StaffDirectory() {
       });
       toast({ title: `Invited ${inviteEmail}`, description: 'Login link + office code sent.' });
       setInviteEmail('');
+      qc.invalidateQueries({ queryKey: ['all-users'] });
     } catch (e) {
       toast({ title: 'Invite failed', description: e.message, variant: 'destructive' });
     }
@@ -93,6 +130,36 @@ export default function StaffDirectory() {
           <p className="text-muted-foreground text-sm">{staff.length} member{staff.length !== 1 ? 's' : ''}</p>
         </div>
       </div>
+
+      {/* Pending Invites */}
+      {isAdmin && pendingInvites.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Pending Invites</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            {pendingInvites.map(invite => (
+              <div key={invite.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                <div>
+                  <p className="text-sm font-medium">{invite.email}</p>
+                  <p className="text-xs text-muted-foreground">Invited, waiting to join</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={async () => {
+                    await base44.integrations.Core.SendEmail({
+                      to: invite.email,
+                      subject: `Reminder: Join ${office?.name}`,
+                      body: `Hi,\n\nThis is a reminder to join ${office?.name} on Assembly Bill Watch.\n\n` +
+                        `Use this invite code: ${office?.invite_code}\n\n` +
+                        `Log in and select "Join an Existing Office" to get started.`,
+                    });
+                    toast({ title: 'Reminder sent', description: `Email sent to ${invite.email}` });
+                  }}>Resend</Button>
+                  <Button variant="outline" size="sm" onClick={() => handleCancelInvite(invite)}>Cancel</Button>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Invite Section */}
       {isAdmin && (

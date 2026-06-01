@@ -34,6 +34,16 @@ export default function OfficeSetup() {
       branding_color: brandingColor,
     });
     await base44.auth.updateMe({ office_id: office.id, role: 'admin' });
+    
+    // Create user record in staff directory
+    await base44.entities.User.create({
+      email: user.email,
+      full_name: user.full_name,
+      office_id: office.id,
+      role: 'admin',
+      is_active: true,
+    });
+    
     window.location.reload();
   }
 
@@ -46,7 +56,30 @@ export default function OfficeSetup() {
       alert('Invalid invite code. Please check and try again.');
       return;
     }
-    await base44.auth.updateMe({ office_id: offices[0].id, role: 'staffer' });
+    const office = offices[0];
+    const user = await base44.auth.me();
+    
+    // Update user's office assignment
+    await base44.auth.updateMe({ office_id: office.id, role: 'staffer' });
+    
+    // Also update the user record in the database
+    const userRecord = await base44.entities.User.filter({ email: user.email });
+    if (userRecord.length > 0) {
+      await base44.entities.User.update(userRecord[0].id, { 
+        office_id: office.id, 
+        role: 'staffer',
+        is_active: true 
+      });
+    } else {
+      await base44.entities.User.create({
+        email: user.email,
+        full_name: user.full_name,
+        office_id: office.id,
+        role: 'staffer',
+        is_active: true,
+      });
+    }
+    
     window.location.reload();
   }
 

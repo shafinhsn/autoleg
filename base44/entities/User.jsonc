@@ -8,9 +8,10 @@
         "admin",
         "legislative_director",
         "staffer",
-        "intern"
+        "intern",
+        "user"
       ],
-      "default": "staffer"
+      "default": "user"
     },
     "office_id": {
       "type": "string",
