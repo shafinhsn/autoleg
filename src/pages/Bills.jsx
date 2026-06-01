@@ -166,34 +166,29 @@ export default function Bills() {
     setSyncProgress({ current: 0, total: bills.length, percent: 0 });
     const apiKey = office?.senate_api_key || '5OuWFvXYcEmkPHLLaRPiHDHbVgnamYTL';
     console.log('Starting sync with API key:', apiKey?.substring(0, 6) + '...');
-    // Process in batches of 5 concurrently to balance speed vs rate limits
-    const batchSize = 5;
     let processed = 0;
     let updatedCount = 0;
     let errorCount = 0;
-    for (let i = 0; i < bills.length; i += batchSize) {
-      const batch = bills.slice(i, i + batchSize);
-      const results = await Promise.all(batch.map(async bill => {
-        try {
-          console.log(`Syncing ${bill.bill_number}...`);
-          const updateData = await syncBill(bill, apiKey);
-          console.log(`${bill.bill_number} updateData:`, updateData);
-          if (updateData && Object.keys(updateData).length > 0) {
-            await base44.entities.Bill.update(bill.id, updateData);
-            console.log(`${bill.bill_number} updated successfully`);
-            return { success: true, bill: bill.bill_number };
-          }
-          return { success: false, bill: bill.bill_number, reason: 'no changes' };
-        } catch (e) { 
-          console.error(`Sync error ${bill.bill_number}`, e); 
-          errorCount++;
-          return { success: false, bill: bill.bill_number, error: e.message };
+    
+    // Process bills sequentially to avoid rate limits
+    for (const bill of bills) {
+      try {
+        console.log(`Syncing ${bill.bill_number}...`);
+        const updateData = await syncBill(bill, apiKey);
+        console.log(`${bill.bill_number} updateData:`, updateData);
+        if (updateData && Object.keys(updateData).length > 0) {
+          await base44.entities.Bill.update(bill.id, updateData);
+          console.log(`${bill.bill_number} updated successfully`);
+          updatedCount++;
         }
-      }));
-      results.forEach(r => { if (r.success) updatedCount++; });
-      processed += batch.length;
+      } catch (e) { 
+        console.error(`Sync error ${bill.bill_number}`, e); 
+        errorCount++;
+      }
+      processed++;
       setSyncProgress({ current: processed, total: bills.length, percent: Math.round((processed / bills.length) * 100) });
-      if (i + batchSize < bills.length) await new Promise(r => setTimeout(r, 100));
+      // Wait 300ms between each bill to avoid rate limits
+      await new Promise(r => setTimeout(r, 300));
     }
     console.log(`Sync complete: ${updatedCount}/${bills.length} updated, ${errorCount} errors`);
     await invalidateBills();
