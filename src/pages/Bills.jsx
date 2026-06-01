@@ -103,8 +103,11 @@ export default function Bills() {
   }));
   const unsectionedBills = filtered.filter(b => !b.section_header || !sections.find(s => s.name === b.section_header));
 
+  const [addingBill, setAddingBill] = useState(false);
+
   async function handleAddBill() {
-    if (!newBillNumber.trim()) return;
+    if (!newBillNumber.trim() || addingBill) return;
+    setAddingBill(true);
     await base44.entities.Bill.create({
       bill_number: newBillNumber.trim().toUpperCase(),
       office_id: office.id,
@@ -115,6 +118,7 @@ export default function Bills() {
     invalidateBills();
     setNewBillNumber('');
     setShowAddForm(false);
+    setAddingBill(false);
   }
 
   async function handleUpdateBill(id, data) {
@@ -374,7 +378,7 @@ export default function Bills() {
             onChange={e => setNewBillNumber(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleAddBill(); }}
             className="max-w-xs text-sm" autoFocus />
-          <Button size="sm" onClick={handleAddBill}>Add</Button>
+          <Button size="sm" onClick={handleAddBill} disabled={addingBill}>Add</Button>
           <Button size="sm" variant="ghost" onClick={() => setShowAddForm(false)}>Cancel</Button>
         </div>
       )}
