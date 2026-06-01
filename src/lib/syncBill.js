@@ -88,22 +88,20 @@ export async function syncBill(bill, apiKey) {
     }
   }
 
-  // Handle companion bills (sameAs)
-  const amendments = result.amendments?.items || {};
-  const latestAmendmentKey = Object.keys(amendments).sort().pop();
-  const latestAmendment = latestAmendmentKey ? amendments[latestAmendmentKey] : null;
+  // For Assembly bills, fetch Senate companion sponsor only
+  if (isAssembly) {
+    const amendments = result.amendments?.items || {};
+    const latestAmendmentKey = Object.keys(amendments).sort().pop();
+    const latestAmendment = latestAmendmentKey ? amendments[latestAmendmentKey] : null;
 
-  if (latestAmendment) {
-    const sameAsItems = latestAmendment.sameAs?.items || [];
-    if (sameAsItems.length > 0) {
-      const companion = sameAsItems[0];
-      const companionNum = companion.basePrintNo || companion.printNo;
-      if (companionNum) {
-        updateData.linked_senate_bill = companionNum;
-        
-        // For Assembly bills, fetch Senate companion to get senate sponsor
-        if (isAssembly && companionNum.startsWith('S')) {
-          console.log(`${billNum} fetching senate companion ${companionNum} for sponsor...`);
+    if (latestAmendment) {
+      const sameAsItems = latestAmendment.sameAs?.items || [];
+      if (sameAsItems.length > 0) {
+        const companion = sameAsItems[0];
+        const companionNum = companion.basePrintNo || companion.printNo;
+        if (companionNum && companionNum.startsWith('S')) {
+          updateData.linked_senate_bill = companionNum;
+          console.log(`${billNum} fetching senate sponsor from ${companionNum}...`);
           try {
             const senateUrl = `https://legislation.nysenate.gov/api/3/bills/${year}/${companionNum}?key=${key}`;
             const senateResp = await fetch(senateUrl);
@@ -114,14 +112,14 @@ export async function syncBill(bill, apiKey) {
                 const sName = senateSponsor.fullName
                   || `${senateSponsor.firstName || ''} ${senateSponsor.lastName || ''}`.trim()
                   || senateSponsor.shortName;
-                if (sName && !updateData.senate_sponsor) {
+                if (sName) {
                   updateData.senate_sponsor = sName;
-                  console.log(`${billNum} got senate sponsor from companion: ${sName}`);
+                  console.log(`${billNum} got senate sponsor: ${sName}`);
                 }
               }
             }
           } catch (e) { 
-            console.error(`${billNum} error fetching senate companion:`, e.message);
+            console.error(`${billNum} error fetching senate sponsor:`, e.message);
           }
         }
       }

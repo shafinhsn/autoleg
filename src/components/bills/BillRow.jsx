@@ -54,32 +54,26 @@ function ColorBadge({ label, colorName, onClick }) {
   );
 }
 
-// Multi-select dropdown for statuses - inline expanded view
-function MultiStatusSelect({ currentStatuses, options, onSave, onCancel }) {
-  const [selected, setSelected] = useState(new Set(currentStatuses));
-
-  function toggle(val) {
-    setSelected(prev => {
-      const next = new Set(prev);
-      next.has(val) ? next.delete(val) : next.add(val);
-      return next;
-    });
-  }
-
+// Status dropdown - select single primary status
+function StatusSelect({ currentStatuses, options, onSave, onCancel }) {
+  const [val, setVal] = useState(currentStatuses?.[0] || '');
+  
   return (
-    <div className="absolute z-50 bg-white border-2 border-primary rounded-xl shadow-xl p-3 min-w-[220px] max-h-80 overflow-y-auto -left-4 mt-1">
-      <div className="grid grid-cols-2 gap-2">
-        {options.map(opt => (
-          <label key={opt} className="flex items-center gap-2 px-2 py-1.5 hover:bg-primary/5 rounded-lg cursor-pointer text-xs font-medium">
-            <input type="checkbox" checked={selected.has(opt)} onChange={() => toggle(opt)} className="rounded text-primary" />
-            <span className="truncate">{opt}</span>
-          </label>
-        ))}
-      </div>
-      <div className="flex gap-2 mt-3 pt-3 border-t border-border">
-        <button onClick={() => onSave([...selected])} className="flex-1 text-xs font-semibold bg-primary text-white rounded-lg px-3 py-1.5 hover:bg-primary/90 transition-colors">Apply</button>
-        <button onClick={onCancel} className="flex-1 text-xs font-semibold border border-border rounded-lg px-3 py-1.5 hover:bg-muted/50 transition-colors">Cancel</button>
-      </div>
+    <div className="absolute z-50 bg-white border-2 border-primary rounded-lg shadow-xl -left-2 mt-1">
+      <select 
+        autoFocus 
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        onBlur={() => onSave(val ? [val] : [])}
+        onKeyDown={e => { 
+          if (e.key === 'Enter') onSave(val ? [val] : []); 
+          if (e.key === 'Escape') onCancel(); 
+        }}
+        className="text-xs border-0 rounded-lg px-3 py-2 bg-white outline-none min-w-[140px]"
+      >
+        <option value="">— Clear Status —</option>
+        {options.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
     </div>
   );
 }
@@ -181,7 +175,7 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
       <td className="py-2 px-3">
         <div className="relative">
           {editingField === 'latest_status' ? (
-            <MultiStatusSelect
+            <StatusSelect
               currentStatuses={billStatuses}
               options={statusOptions}
               onSave={v => { onUpdate(bill.id, { latest_status: v }); setEditingField(null); }}
@@ -190,12 +184,11 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
           ) : (
             <div
               onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('latest_status', ''); }}
-              className={`flex flex-wrap gap-1 ${isAdmin ? 'cursor-pointer' : ''}`}
+              className={`${isAdmin ? 'cursor-pointer' : ''}`}
             >
-              {billStatuses.length > 0 ? billStatuses.map(s => {
-                const colorName = statusItems?.find(i => i.label === s)?.color || DEFAULT_STATUS_COLORS[s] || 'Gray';
-                return <ColorBadge key={s} label={s} colorName={colorName} />;
-              }) : <span className="text-muted-foreground/40 text-xs">—</span>}
+              {billStatuses.length > 0 ? (
+                <ColorBadge label={billStatuses[0]} colorName={statusItems?.find(i => i.label === billStatuses[0])?.color || DEFAULT_STATUS_COLORS[billStatuses[0]] || 'Gray'} />
+              ) : <span className="text-muted-foreground/40 text-xs">—</span>}
             </div>
           )}
         </div>
