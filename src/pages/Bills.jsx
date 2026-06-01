@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useOffice } from '@/hooks/useOffice';
+import { DEFAULT_PRIORITY_TAGS, DEFAULT_STATUSES, DEFAULT_COMMITTEES } from '@/lib/tracker-defaults';
 import { Search, Plus, RefreshCw, Upload, Trash2, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -73,18 +74,14 @@ export default function Bills() {
     qc.invalidateQueries({ queryKey: ['bills', office?.id] });
   }
 
-  // Build filter options — prefer TrackerConfig, fall back to bill data
-  const uniqueStatuses = statusConfigs[0]?.items?.length
-    ? statusConfigs[0].items.map(i => i.label)
-    : [...new Set(bills.flatMap(b => Array.isArray(b.latest_status) ? b.latest_status : (b.latest_status ? [b.latest_status] : [])))].sort();
+  // Resolve config items — saved config → defaults (never empty)
+  const statusItems = statusConfigs[0]?.items?.length ? statusConfigs[0].items : DEFAULT_STATUSES;
+  const committeeItems = committeeConfigs[0]?.items?.length ? committeeConfigs[0].items : DEFAULT_COMMITTEES;
+  const priorityItems = priorityConfigs[0]?.items?.length ? priorityConfigs[0].items : DEFAULT_PRIORITY_TAGS;
 
-  const uniqueCommittees = committeeConfigs[0]?.items?.length
-    ? committeeConfigs[0].items.map(i => i.label)
-    : [...new Set(bills.map(b => b.committee).filter(Boolean))].sort();
-
-  const uniquePriorities = priorityConfigs[0]?.items?.length
-    ? priorityConfigs[0].items.map(i => i.label)
-    : [...new Set(bills.flatMap(b => b.tags || []).filter(Boolean))];
+  const uniqueStatuses = statusItems.map(i => i.label);
+  const uniqueCommittees = committeeItems.map(i => i.label);
+  const uniquePriorities = priorityItems.map(i => i.label);
 
   const filtered = bills.filter(b => {
     if (search && !b.bill_number?.toLowerCase().includes(search.toLowerCase()) &&
@@ -293,8 +290,9 @@ export default function Bills() {
               isAdmin={isAdmin}
               selected={selectedBills.has(bill.id)}
               onToggleSelect={() => setSelectedBills(prev => { const n = new Set(prev); n.has(bill.id) ? n.delete(bill.id) : n.add(bill.id); return n; })}
-              priorityItems={priorityConfigs[0]?.items}
-              statusItems={statusConfigs[0]?.items}
+              priorityItems={priorityItems}
+              statusItems={statusItems}
+              committeeItems={committeeItems}
               uniqueStatuses={uniqueStatuses}
               uniqueCommittees={uniqueCommittees}
             />

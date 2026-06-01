@@ -21,14 +21,10 @@ export async function syncBill(bill, apiKey) {
 
   const updateData = {};
 
-  // Title
-  if (result.title) updateData.title = result.title;
-
-  // Status — stored as array
-  if (result.status?.statusDesc) updateData.latest_status = [result.status.statusDesc];
-
-  // Committee
-  if (result.status?.committeeName) updateData.committee = result.status.committeeName;
+  // Force overwrite key fields from API — no stale data
+  updateData.title = result.title || bill.title || '';
+  updateData.latest_status = result.status?.statusDesc ? [result.status.statusDesc] : [];
+  updateData.committee = result.status?.committeeName || '';
 
   // Primary sponsor of this bill
   const sponsorMember = result.sponsor?.member;

@@ -97,7 +97,7 @@ function InlineSelect({ value, options, onSave, onCancel }) {
   );
 }
 
-export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, onToggleSelect, priorityItems, statusItems, uniqueStatuses, uniqueCommittees }) {
+export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, onToggleSelect, priorityItems, statusItems, committeeItems, uniqueStatuses, uniqueCommittees }) {
   const [editingField, setEditingField] = useState(null);
   const [editValue, setEditValue] = useState('');
 
@@ -159,7 +159,7 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
       <td className="py-2 px-3 whitespace-nowrap"><EditableCell field="senate_sponsor" value={bill.senate_sponsor} /></td>
       <td className="py-2 px-3">
         {editingField === 'committee' ? (
-          <InlineSelect value={bill.committee} options={uniqueCommittees || []} onSave={v => commitEdit('committee', v)} onCancel={() => setEditingField(null)} />
+          <InlineSelect value={bill.committee} options={committeeItems?.map(i => i.label) || uniqueCommittees || []} onSave={v => commitEdit('committee', v)} onCancel={() => setEditingField(null)} />
         ) : (
           <span onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('committee', bill.committee); }}
             className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border ${isAdmin ? 'cursor-pointer hover:opacity-80' : ''} ${bill.committee ? 'bg-sky-100 text-sky-700 border-sky-200' : 'text-muted-foreground/40'}`}>
