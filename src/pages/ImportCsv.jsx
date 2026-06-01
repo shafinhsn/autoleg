@@ -125,7 +125,7 @@ export default function ImportCsv() {
     setImporting(true);
     try {
       const response = await base44.functions.invoke('importBillsFromCsv', {
-        office_id: office.id,
+        officeId: office.id,
         rows: validRows,
       });
       setResult(response.data);

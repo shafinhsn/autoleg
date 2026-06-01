@@ -10,66 +10,26 @@ Deno.serve(async (req) => {
 
     const { rows, officeId, csvData } = await req.json();
     
+    console.log('Import request:', { officeId, rowsCount: rows?.length, hasCsvData: !!csvData });
+    
     if (!officeId) {
       return Response.json({ error: 'Missing officeId' }, { status: 400 });
     }
 
-    let parsedBills = [];
-    
-    // If rows provided directly (from frontend parsing), use them
-    if (rows && Array.isArray(rows)) {
-      parsedBills = rows;
-    } else if (csvData) {
-      // Otherwise use LLM to parse CSV data
-      const llmResponse = await base44.integrations.Core.InvokeLLM({
-        prompt: `Parse this CSV data for legislative bills. Extract each bill row and return a JSON array. Each bill should have: bill_number (required), title, short_name, senate_sponsor, assembly_sponsor, committee, latest_status (as array), section_header, tags (as array), priority_rank, pc_contact, next_steps, session_comments, lobbyist, bill_documents, internal_notes, staff_assignees, linked_senate_bill, google_drive_url, is_caucus_bill (boolean), hearing_date, hearing_time, hearing_location.
-        
-        Skip section header rows (like "TOP 5 PRIORITY"). Only return actual bill rows.
-        
-        CSV Data:
-        ${csvData.slice(0, 50000)}${csvData.length > 50000 ? '...(truncated)' : ''}
-        
-        Return ONLY valid JSON array, no explanation.`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            bills: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  bill_number: { type: "string" },
-                  title: { type: "string" },
-                  short_name: { type: "string" },
-                  senate_sponsor: { type: "string" },
-                  assembly_sponsor: { type: "string" },
-                  committee: { type: "string" },
-                  latest_status: { type: "array", items: { type: "string" } },
-                  section_header: { type: "string" },
-                  tags: { type: "array", items: { type: "string" } },
-                  priority_rank: { type: "string" },
-                  pc_contact: { type: "string" },
-                  next_steps: { type: "string" },
-                  session_comments: { type: "string" },
-                  lobbyist: { type: "string" },
-                  bill_documents: { type: "string" },
-                  internal_notes: { type: "string" },
-                  staff_assignees: { type: "string" },
-                  linked_senate_bill: { type: "string" },
-                  google_drive_url: { type: "string" },
-                  is_caucus_bill: { type: "boolean" },
-                  hearing_date: { type: "string" },
-                  hearing_time: { type: "string" },
-                  hearing_location: { type: "string" }
-                }
-              }
-            }
-          },
-          required: ["bills"]
-        }
-      });
-      parsedBills = llmResponse.bills || [];
+    if (!rows || !Array.isArray(rows) || rows.length === 0) {
+      return Response.json({ error: 'No valid rows provided. Please upload a CSV or Excel file.' }, { status: 400 });
     }
+
+    // Validate first row has bill_number
+    const firstRow = rows[0];
+    if (!firstRow.bill_number) {
+      return Response.json({ 
+        error: 'Missing bill_number field. Please ensure at least one column is mapped to "Bill Number".',
+        receivedFields: Object.keys(firstRow)
+      }, { status: 400 });
+    }
+
+    const parsedBills = rows;
     
     if (parsedBills.length === 0) {
       return Response.json({ error: 'No valid bill rows found in CSV' }, { status: 400 });
