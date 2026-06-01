@@ -34,15 +34,13 @@ export default function OfficeSetup() {
         invite_code: code,
         branding_color: brandingColor,
       });
-      await base44.auth.updateMe({ office_id: office.id, role: 'admin' });
+      await base44.auth.updateMe({ office_id: office.id });
       
-      // Create user record in staff directory
+      // Create user record in staff directory (role managed separately in staff directory)
       await base44.entities.User.create({
         email: user.email,
         full_name: user.full_name,
         office_id: office.id,
-        role: 'admin',
-        is_active: true,
       });
       
       window.location.reload();
