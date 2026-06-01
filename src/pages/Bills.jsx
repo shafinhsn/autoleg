@@ -49,6 +49,12 @@ export default function Bills() {
     enabled: !!office?.id,
   });
 
+  const { data: committeeConfigs = [] } = useQuery({
+    queryKey: ['tracker-config', office?.id, 'committees'],
+    queryFn: () => base44.entities.TrackerConfig.filter({ office_id: office?.id, config_type: 'committees' }),
+    enabled: !!office?.id,
+  });
+
   useEffect(() => {
     if (sections.length > 0 && expandedSections.size === 0) {
       setExpandedSections(new Set(sections.map(s => s.id)));
@@ -67,14 +73,14 @@ export default function Bills() {
     qc.invalidateQueries({ queryKey: ['bills', office?.id] });
   }
 
-  // Build unique filter options from all bills — deduplicated globally
-  const uniqueStatuses = [...new Set(bills.flatMap(b => {
-    const s = b.latest_status;
-    if (!s) return [];
-    return Array.isArray(s) ? s : [s];
-  }))].sort();
+  // Build filter options — prefer TrackerConfig, fall back to bill data
+  const uniqueStatuses = statusConfigs[0]?.items?.length
+    ? statusConfigs[0].items.map(i => i.label)
+    : [...new Set(bills.flatMap(b => Array.isArray(b.latest_status) ? b.latest_status : (b.latest_status ? [b.latest_status] : [])))].sort();
 
-  const uniqueCommittees = [...new Set(bills.map(b => b.committee).filter(Boolean))].sort();
+  const uniqueCommittees = committeeConfigs[0]?.items?.length
+    ? committeeConfigs[0].items.map(i => i.label)
+    : [...new Set(bills.map(b => b.committee).filter(Boolean))].sort();
 
   const uniquePriorities = priorityConfigs[0]?.items?.length
     ? priorityConfigs[0].items.map(i => i.label)

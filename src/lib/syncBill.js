@@ -30,8 +30,7 @@ export async function syncBill(bill, apiKey) {
   // Committee
   if (result.status?.committeeName) updateData.committee = result.status.committeeName;
 
-  // Primary sponsor — always the bill's own lead sponsor
-  // For Senate bills → senate_sponsor, for Assembly bills → assembly_sponsor
+  // Primary sponsor of this bill
   const sponsorMember = result.sponsor?.member;
   if (sponsorMember) {
     const name = sponsorMember.fullName
@@ -56,7 +55,27 @@ export async function syncBill(bill, apiKey) {
     if (sameAsItems.length > 0) {
       const companion = sameAsItems[0];
       const companionNum = companion.basePrintNo || companion.printNo;
-      if (companionNum) updateData.linked_senate_bill = companionNum;
+      if (companionNum) {
+        updateData.linked_senate_bill = companionNum;
+
+        // For Assembly bills, fetch the Senate companion to get its sponsor
+        if (!billNum.startsWith('S') && companionNum.toUpperCase().startsWith('S')) {
+          try {
+            const senateUrl = `https://legislation.nysenate.gov/api/3/bills/${year}/${companionNum}?key=${key}`;
+            const senateResp = await fetch(senateUrl);
+            if (senateResp.ok) {
+              const senateJson = await senateResp.json();
+              const senateSponsor = senateJson?.result?.sponsor?.member;
+              if (senateSponsor) {
+                const sName = senateSponsor.fullName
+                  || `${senateSponsor.firstName || ''} ${senateSponsor.lastName || ''}`.trim()
+                  || senateSponsor.shortName;
+                if (sName) updateData.senate_sponsor = sName;
+              }
+            }
+          } catch (_) { /* ignore senate sponsor fetch errors */ }
+        }
+      }
     }
   }
 
