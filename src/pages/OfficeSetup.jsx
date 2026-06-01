@@ -57,44 +57,17 @@ export default function OfficeSetup() {
     if (!inviteCode.trim()) return;
     setLoading(true);
     try {
-      console.log('Joining office with code:', inviteCode);
       const offices = await base44.entities.Office.filter({ invite_code: inviteCode.trim().toUpperCase() });
-      console.log('Found offices:', offices);
       if (offices.length === 0) {
         setLoading(false);
         setError('Invalid invite code. Please check and try again.');
         return;
       }
       const office = offices[0];
-      const user = await base44.auth.me();
-      console.log('Current user:', user);
       
-      // Update user's office assignment (only office_id, not role — users can't change their own role)
-      console.log('Updating user auth with office_id:', office.id);
+      // Update user's office assignment only (admin assigns role later)
       await base44.auth.updateMe({ office_id: office.id });
       
-      // Also update the user record in the database
-      const userRecord = await base44.entities.User.filter({ email: user.email });
-      console.log('Found user records:', userRecord);
-      if (userRecord.length > 0) {
-        console.log('Updating existing user record');
-        await base44.entities.User.update(userRecord[0].id, { 
-          office_id: office.id, 
-          role: 'staffer',
-          is_active: true 
-        });
-      } else {
-        console.log('Creating new user record');
-        await base44.entities.User.create({
-          email: user.email,
-          full_name: user.full_name,
-          office_id: office.id,
-          role: 'staffer',
-          is_active: true,
-        });
-      }
-      
-      console.log('Join complete, reloading...');
       window.location.reload();
     } catch (e) {
       console.error('Error joining office:', e);
