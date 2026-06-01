@@ -4,18 +4,25 @@
  */
 export async function syncBill(bill, apiKey) {
   const billNum = bill.bill_number?.trim().toUpperCase();
-  if (!billNum) return false;
+  if (!billNum) return null;
 
   const year = bill.session_year || 2026;
   const key = apiKey || '5OuWFvXYcEmkPHLLaRPiHDHbVgnamYTL';
   const url = `https://legislation.nysenate.gov/api/3/bills/${year}/${billNum}?key=${key}&view=with_refs`;
 
+  console.log(`Syncing ${billNum} (${year})...`);
   const resp = await fetch(url);
-  if (!resp.ok) return false;
+  if (!resp.ok) {
+    console.error(`API error for ${billNum}: ${resp.status}`);
+    return null;
+  }
 
   const json = await resp.json();
   const result = json?.result;
-  if (!result) return false;
+  if (!result) {
+    console.error(`No result for ${billNum}`);
+    return null;
+  }
 
   const updateData = {};
 

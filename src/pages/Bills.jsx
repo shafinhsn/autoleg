@@ -168,19 +168,26 @@ export default function Bills() {
     // Process in batches of 5 concurrently to balance speed vs rate limits
     const batchSize = 5;
     let processed = 0;
+    let updatedCount = 0;
     for (let i = 0; i < bills.length; i += batchSize) {
       const batch = bills.slice(i, i + batchSize);
       await Promise.all(batch.map(async bill => {
         try {
           const updateData = await syncBill(bill, apiKey);
-          if (updateData) await base44.entities.Bill.update(bill.id, updateData);
-        } catch (e) { console.error(`Sync error ${bill.bill_number}`, e); }
+          if (updateData && Object.keys(updateData).length > 0) {
+            await base44.entities.Bill.update(bill.id, updateData);
+            updatedCount++;
+          }
+        } catch (e) { 
+          console.error(`Sync error ${bill.bill_number}`, e); 
+        }
       }));
       processed += batch.length;
       setSyncProgress({ current: processed, total: bills.length, percent: Math.round((processed / bills.length) * 100) });
       if (i + batchSize < bills.length) await new Promise(r => setTimeout(r, 100));
     }
-    invalidateBills();
+    console.log(`Sync complete: ${updatedCount}/${bills.length} bills updated`);
+    await invalidateBills();
     setSyncing(false);
     setSyncProgress({ current: 0, total: 0, percent: 0 });
   }
