@@ -22,6 +22,8 @@ export default function ImportCsv() {
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, percent: 0 });
   const [fileName, setFileName] = useState('');
   const [aiAnalyzing, setAiAnalyzing] = useState(false);
+  const [failedBills, setFailedBills] = useState([]);
+  const [retrying, setRetrying] = useState(false);
 
   const BILL_FIELDS = [
     { value: 'bill_number', label: 'Bill Number *' },
@@ -152,12 +154,20 @@ export default function ImportCsv() {
 
     setImporting(true);
     setImportProgress({ current: 0, total: validRows.length, percent: 0 });
+    setFailedBills([]);
     try {
       const response = await base44.functions.invoke('importBillsFromCsv', {
         officeId: office.id,
         rows: validRows,
       });
       setResult(response.data);
+      // Extract rate-limited bills for potential retry
+      if (response.data.errorDetails) {
+        const rateLimitedBills = response.data.errorDetails
+          .filter(e => e.error && e.error.includes('rate limit'))
+          .map(e => validRows.find(r => r.bill_number === e.bill));
+        setFailedBills(rateLimitedBills.filter(Boolean));
+      }
       setImportProgress({ current: validRows.length, total: validRows.length, percent: 100 });
       qc.invalidateQueries({ queryKey: ['bills'] });
       qc.invalidateQueries({ queryKey: ['sections'] });
@@ -168,8 +178,32 @@ export default function ImportCsv() {
     setImporting(false);
   }
 
+  async function handleRetry() {
+    if (failedBills.length === 0) return;
+    setRetrying(true);
+    try {
+      const response = await base44.functions.invoke('importBillsFromCsv', {
+        officeId: office.id,
+        rows: failedBills,
+      });
+      setResult({
+        created: (result.created || 0) + (response.data.created || 0),
+        updated: (result.updated || 0) + (response.data.updated || 0),
+        errors: response.data.errors || 0,
+        errorDetails: response.data.errorDetails || [],
+      });
+      setFailedBills([]);
+      qc.invalidateQueries({ queryKey: ['bills'] });
+      qc.invalidateQueries({ queryKey: ['sections'] });
+    } catch (e) {
+      console.error('Retry error', e);
+      alert('Retry failed: ' + (e.message || String(e)));
+    }
+    setRetrying(false);
+  }
+
   function reset() {
-    setParsed([]); setHeaders([]); setMapping({}); setResult(null); setFileName('');
+    setParsed([]); setHeaders([]); setMapping({}); setResult(null); setFileName(''); setFailedBills([]); setRetrying(false);
     if (fileRef.current) fileRef.current.value = '';
   }
 
@@ -199,7 +233,14 @@ export default function ImportCsv() {
             </div>
             {result.errors > 0 && result.errorDetails && result.errorDetails.length > 0 && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 max-h-64 overflow-auto">
-                <p className="font-semibold text-red-900 mb-2">Error Details:</p>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-semibold text-red-900">Error Details:</p>
+                  {failedBills.length > 0 && (
+                    <Button size="sm" onClick={handleRetry} disabled={retrying}>
+                      {retrying ? 'Retrying...' : `Retry ${failedBills.length} Bills`}
+                    </Button>
+                  )}
+                </div>
                 <ul className="text-sm text-red-800 space-y-1">
                   {result.errorDetails.slice(0, 50).map((err, i) => (
                     <li key={i} className="flex gap-2">
