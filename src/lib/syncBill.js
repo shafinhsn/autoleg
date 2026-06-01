@@ -46,32 +46,47 @@ export async function syncBill(bill, apiKey) {
   const latestAmendmentKey = Object.keys(amendments).sort().pop();
   const latestAmendment = latestAmendmentKey ? amendments[latestAmendmentKey] : null;
 
-  if (latestAmendment) {
+  // For Assembly bills: try to find senate sponsor via sameAs companion or stored linked_senate_bill
+  if (!billNum.startsWith('S')) {
+    let companionNum = null;
+
+    if (latestAmendment) {
+      const sameAsItems = latestAmendment.sameAs?.items || [];
+      if (sameAsItems.length > 0) {
+        const companion = sameAsItems[0];
+        companionNum = companion.basePrintNo || companion.printNo;
+        if (companionNum) updateData.linked_senate_bill = companionNum;
+      }
+    }
+
+    // Fall back to already-stored linked senate bill
+    if (!companionNum && bill.linked_senate_bill) {
+      companionNum = bill.linked_senate_bill;
+    }
+
+    if (companionNum && companionNum.toUpperCase().startsWith('S')) {
+      try {
+        const senateUrl = `https://legislation.nysenate.gov/api/3/bills/${year}/${companionNum}?key=${key}`;
+        const senateResp = await fetch(senateUrl);
+        if (senateResp.ok) {
+          const senateJson = await senateResp.json();
+          const senateSponsor = senateJson?.result?.sponsor?.member;
+          if (senateSponsor) {
+            const sName = senateSponsor.fullName
+              || `${senateSponsor.firstName || ''} ${senateSponsor.lastName || ''}`.trim()
+              || senateSponsor.shortName;
+            if (sName) updateData.senate_sponsor = sName;
+          }
+        }
+      } catch (_) { /* ignore */ }
+    }
+  } else if (latestAmendment) {
+    // Senate bill — still track sameAs for linked assembly bill
     const sameAsItems = latestAmendment.sameAs?.items || [];
     if (sameAsItems.length > 0) {
       const companion = sameAsItems[0];
       const companionNum = companion.basePrintNo || companion.printNo;
-      if (companionNum) {
-        updateData.linked_senate_bill = companionNum;
-
-        // For Assembly bills, fetch the Senate companion to get its sponsor
-        if (!billNum.startsWith('S') && companionNum.toUpperCase().startsWith('S')) {
-          try {
-            const senateUrl = `https://legislation.nysenate.gov/api/3/bills/${year}/${companionNum}?key=${key}`;
-            const senateResp = await fetch(senateUrl);
-            if (senateResp.ok) {
-              const senateJson = await senateResp.json();
-              const senateSponsor = senateJson?.result?.sponsor?.member;
-              if (senateSponsor) {
-                const sName = senateSponsor.fullName
-                  || `${senateSponsor.firstName || ''} ${senateSponsor.lastName || ''}`.trim()
-                  || senateSponsor.shortName;
-                if (sName) updateData.senate_sponsor = sName;
-              }
-            }
-          } catch (_) { /* ignore senate sponsor fetch errors */ }
-        }
-      }
+      if (companionNum) updateData.linked_senate_bill = companionNum;
     }
   }
 
