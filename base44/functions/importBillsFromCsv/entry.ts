@@ -201,33 +201,15 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Retry failed bills after waiting
-    if (failedBills.length > 0) {
-      console.log(`Retrying ${failedBills.length} failed bills after rate limit...`);
-      await sleep(2000); // Wait 2 seconds before retry
-      
-      for (const { row, billNum, billData } of failedBills) {
-        try {
-          if (existingMap[billNum]) {
-            await base44.asServiceRole.entities.Bill.update(existingMap[billNum].id, billData);
-            updated++;
-          } else {
-            await base44.asServiceRole.entities.Bill.create(billData);
-            created++;
-          }
-        } catch (retryError) {
-          errors++;
-          errorDetails.push({ bill: billNum, error: retryError.message || String(retryError) });
-        }
-        await sleep(500); // Longer delay between retries
-      }
-    }
+    // Return failed bills for manual retry (don't auto-retry)
+    const failedRows = failedBills.map(f => f.row);
 
     return Response.json({ 
       created, 
       updated, 
       errors, 
       errorDetails: errorDetails.slice(0, 100),
+      failedBills: failedRows,
     });
   } catch (error) {
     console.error('Import failed:', error);

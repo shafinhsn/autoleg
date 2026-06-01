@@ -161,14 +161,11 @@ export default function ImportCsv() {
         rows: validRows,
       });
       setResult(response.data);
-      // Extract rate-limited bills for potential retry
-      if (response.data.errorDetails) {
-        const rateLimitedBills = response.data.errorDetails
-          .filter(e => e.error && e.error.includes('rate limit'))
-          .map(e => validRows.find(r => r.bill_number === e.bill));
-        setFailedBills(rateLimitedBills.filter(Boolean));
+      // Store failed bills from response for retry
+      if (response.data.failedBills && response.data.failedBills.length > 0) {
+        setFailedBills(response.data.failedBills);
       }
-      setImportProgress({ current: validRows.length, total: validRows.length, percent: 100 });
+      setImportProgress({ current: validRows.length - (response.data.failedBills?.length || 0), total: validRows.length, percent: 100 });
       qc.invalidateQueries({ queryKey: ['bills'] });
       qc.invalidateQueries({ queryKey: ['sections'] });
     } catch (e) {
