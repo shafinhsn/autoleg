@@ -94,6 +94,17 @@ function ItemEditor({ items, setItems }) {
   );
 }
 
+function getSectionColorFromConfig(colorName) {
+  // Map config color names to hex colors for section headers
+  const colorMap = {
+    'Red': '#dc2626', 'Orange': '#ea580c', 'Amber': '#f59e0b', 'Yellow': '#eab308',
+    'Green': '#16a34a', 'Emerald': '#10b981', 'Teal': '#14b8a6', 'Sky': '#0ea5e9',
+    'Blue': '#2563eb', 'Indigo': '#4f46e5', 'Violet': '#8b5cf6', 'Purple': '#9333ea',
+    'Pink': '#ec4899', 'Gray': '#6b7280', 'Slate': '#475569', 'Stone': '#78716c',
+  };
+  return colorMap[colorName] || '#2563eb';
+}
+
 function ConfigTab({ configType, defaultItems, description }) {
   const { office } = useOffice();
   const qc = useQueryClient();
@@ -127,7 +138,40 @@ function ConfigTab({ configType, defaultItems, description }) {
         items: withOrder,
       });
     }
+    
+    // Sync section headers with priority tags
+    if (configType === 'priority_tags') {
+      const existingSections = await base44.entities.SectionHeader.filter({ office_id: office.id });
+      const existingNames = new Set(existingSections.map(s => s.name));
+      const newNames = new Set(withOrder.map(i => i.label));
+      
+      // Create missing sections
+      let sectionOrder = existingSections.length;
+      for (const item of withOrder) {
+        if (!existingNames.has(item.label)) {
+          const sectionColor = getSectionColorFromConfig(item.color);
+          await base44.entities.SectionHeader.create({
+            office_id: office.id,
+            name: item.label,
+            color: sectionColor,
+            sort_order: sectionOrder++,
+          });
+        }
+      }
+      
+      // Remove sections that no longer exist in priority tags (optional - only if no bills use them)
+      for (const section of existingSections) {
+        if (!newNames.has(section.name)) {
+          const billsInSection = await base44.entities.Bill.filter({ office_id: office.id, section_header: section.name });
+          if (billsInSection.length === 0) {
+            await base44.entities.SectionHeader.delete(section.id);
+          }
+        }
+      }
+    }
+    
     qc.invalidateQueries({ queryKey: ['tracker-config'] });
+    qc.invalidateQueries({ queryKey: ['sections', office?.id] });
     toast({ title: 'Changes saved' });
   }
 

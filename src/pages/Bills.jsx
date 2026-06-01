@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import SectionHeaderBar from '@/components/bills/SectionHeaderBar';
 import BillRow from '@/components/bills/BillRow.jsx';
 import { getSectionColor } from '@/lib/bill-utils';
+import { COLOR_MAP } from '@/pages/Customize';
 import { syncBill } from '@/lib/syncBill';
 import { Link } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
@@ -83,8 +84,8 @@ export default function Bills() {
 
   const uniqueStatuses = statusItems.map(i => i.label);
   const uniqueCommittees = committeeItems.map(i => i.label);
-  // Use section headers for the priority filter dropdown
-  const uniquePriorities = sections.map(s => s.name);
+  // Use priority tags from TrackerConfig for the filter dropdown (not section headers)
+  const uniquePriorities = priorityItems.map(i => i.label);
 
   const filtered = bills.filter(b => {
     if (search && !b.bill_number?.toLowerCase().includes(search.toLowerCase()) &&
@@ -129,16 +130,21 @@ export default function Bills() {
     if (data.latest_status !== undefined && !Array.isArray(data.latest_status)) {
       data.latest_status = data.latest_status ? [data.latest_status] : [];
     }
+    // When priority tag changes, update section_header to match and ensure section exists
     if (data.tags !== undefined) {
       const firstTag = Array.isArray(data.tags) ? data.tags[0] : data.tags;
       if (firstTag) {
         data.section_header = firstTag;
+        // Ensure section header exists for this priority tag
         const existingSection = sections.find(s => s.name === firstTag);
         if (!existingSection) {
+          // Get the color from priority config
+          const priorityConfig = priorityItems.find(i => i.label === firstTag);
+          const sectionColor = priorityConfig?.color ? getSectionColorFromConfig(priorityConfig.color) : getSectionColor(firstTag);
           await base44.entities.SectionHeader.create({
             office_id: office.id,
             name: firstTag,
-            color: getSectionColor(firstTag),
+            color: sectionColor,
             sort_order: sections.length,
           });
           qc.invalidateQueries({ queryKey: ['sections', office?.id] });
@@ -195,6 +201,19 @@ export default function Bills() {
     setSyncing(false);
     setSyncProgress({ current: 0, total: 0, percent: 0 });
     alert(`Sync complete: ${updatedCount} bills updated, ${errorCount} errors`);
+  }
+
+  function getSectionColorFromConfig(colorName) {
+    const colorDef = COLOR_MAP[colorName];
+    if (!colorDef) return getSectionColor('ACTIVE');
+    // Map color name to hex based on typical shade
+    const colorToHex = {
+      Red: '#dc2626', Orange: '#ea580c', Amber: '#f59e0b', Yellow: '#eab308',
+      Green: '#16a34a', Emerald: '#10b981', Teal: '#14b8a6', Sky: '#0ea5e9',
+      Blue: '#2563eb', Indigo: '#4f46e5', Violet: '#8b5cf6', Purple: '#9333ea',
+      Pink: '#ec4899', Gray: '#6b7280', Slate: '#475569', Stone: '#78716c',
+    };
+    return colorToHex[colorName] || '#2563eb';
   }
 
   async function handleUpdateSection(id, data) {
