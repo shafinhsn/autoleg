@@ -75,13 +75,19 @@ Deno.serve(async (req) => {
     // Process bills sequentially to avoid rate limits and timeouts
     for (let i = 0; i < parsedBills.length; i++) {
       const row = parsedBills[i];
-      const billNum = String(row.bill_number || '').trim().toUpperCase();
+      let billNum = String(row.bill_number || '').trim().toUpperCase();
       
-      if (!billNum || !/^[AS]\d+$/.test(billNum)) {
+      // Remove suffixes like -A, -B, / S1234 for validation
+      const baseBillNum = billNum.split('-')[0].split('/')[0].trim();
+      
+      if (!baseBillNum || !/^[AS]\d+$/.test(baseBillNum)) {
         errors++;
         errorDetails.push({ bill: row.bill_number || 'unknown', error: 'Invalid bill number format' });
         continue;
       }
+      
+      // Use the full bill number (with suffix) for storage
+      billNum = baseBillNum;
 
       const billData = {
         office_id: officeId,
@@ -129,12 +135,31 @@ Deno.serve(async (req) => {
         }
       } catch (e) {
         errors++;
-        errorDetails.push({ bill: billNum, error: e.message || String(e) });
+        // Check if it's a rate limit error and retry once
+        const errorMsg = e.message || String(e);
+        if (errorMsg.includes('rate limit') && i < parsedBills.length - 1) {
+          await sleep(500); // Wait longer on rate limit
+          try {
+            if (existingMap[billNum]) {
+              await base44.asServiceRole.entities.Bill.update(existingMap[billNum].id, billData);
+              updated++;
+              errorDetails.pop(); // Remove the rate limit error
+            } else {
+              await base44.asServiceRole.entities.Bill.create(billData);
+              created++;
+              errorDetails.pop(); // Remove the rate limit error
+            }
+          } catch (retryError) {
+            errorDetails.push({ bill: billNum, error: retryError.message || String(retryError) });
+          }
+        } else {
+          errorDetails.push({ bill: billNum, error: errorMsg });
+        }
       }
 
-      // Small delay between each bill to respect rate limits
+      // Small delay between each bill to avoid rate limits
       if (i < parsedBills.length - 1) {
-        await sleep(100);
+        await sleep(200);
       }
     }
 
