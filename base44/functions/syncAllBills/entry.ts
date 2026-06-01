@@ -59,7 +59,7 @@ async function syncBill(bill, apiKey) {
     // Update key fields from API
     updateData.title = result.title || bill.title || '';
     updateData.latest_status = result.status?.statusDesc ? [result.status.statusDesc] : [];
-    updateData.committee = result.status?.committeeName || '';
+    updateData.committee = result.status?.committeeName ? [result.status.committeeName] : [];
 
     // Primary sponsor
     const sponsorMember = result.sponsor?.member;
