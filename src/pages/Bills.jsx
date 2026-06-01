@@ -321,14 +321,18 @@ export default function Bills() {
                 onChange={() => toggleSelectAll(tableBills)} className="rounded" />
             </th>
             <th className="py-2 px-3 font-medium">Bill No.</th>
-            <th className="py-2 px-3 font-medium">Short Name</th>
+            <th className="py-2 px-3 font-medium">Priority</th>
             <th className="py-2 px-3 font-medium">Title</th>
+            <th className="py-2 px-3 font-medium">Short Name</th>
             <th className="py-2 px-3 font-medium">Senate Sponsor</th>
             <th className="py-2 px-3 font-medium">Committee</th>
             <th className="py-2 px-3 font-medium">Status</th>
-            <th className="py-2 px-3 font-medium">Priority</th>
             <th className="py-2 px-3 font-medium">P&amp;C Contact</th>
-            <th className="py-2 px-3 font-medium">Drive</th>
+            <th className="py-2 px-3 font-medium">Next Steps</th>
+            <th className="py-2 px-3 font-medium">Session Comments</th>
+            <th className="py-2 px-3 font-medium">Lobbyist</th>
+            <th className="py-2 px-3 font-medium">Documents</th>
+            <th className="py-2 px-3 font-medium">Caucus</th>
             <th className="py-2 px-3 w-10"></th>
           </tr>
         </thead>

@@ -152,12 +152,21 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
         <Link to={`/bills/${bill.id}`} className="font-mono font-semibold text-primary hover:underline">{bill.bill_number}</Link>
         {bill.is_caucus_bill && <span className="ml-1 text-[9px] bg-accent/20 text-accent px-1 rounded font-medium">C</span>}
       </td>
-      <td className="py-2 px-3 max-w-[100px]"><EditableCell field="short_name" value={bill.short_name} /></td>
-      <td className="py-2 px-3 max-w-[220px]">
+      <td className="py-2 px-3">
+        {editingField === 'tags' ? (
+          <InlineSelect value={firstTag} options={priorityOptions} onSave={v => { commitEdit('tags', v ? [v] : []); }} onCancel={() => setEditingField(null)} />
+        ) : (
+          <div onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('tags', firstTag); }}>
+            {firstTag ? <ColorBadge label={firstTag} colorName={priorityColorName} /> : <span className="text-muted-foreground/40 text-xs cursor-pointer">—</span>}
+          </div>
+        )}
+      </td>
+      <td className="py-2 px-3 max-w-[200px]">
         <Link to={`/bills/${bill.id}`} className="hover:text-primary truncate block">
           {bill.title || <span className="text-muted-foreground/40 italic">No title</span>}
         </Link>
       </td>
+      <td className="py-2 px-3 max-w-[100px]"><EditableCell field="short_name" value={bill.short_name} /></td>
       <td className="py-2 px-3 whitespace-nowrap"><EditableCell field="senate_sponsor" value={bill.senate_sponsor} /></td>
       <td className="py-2 px-3">
         {editingField === 'committee' ? (
@@ -191,35 +200,22 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
           )}
         </div>
       </td>
+      <td className="py-2 px-3"><EditableCell field="pc_contact" value={bill.pc_contact} /></td>
+      <td className="py-2 px-3 max-w-[120px]"><EditableCell field="next_steps" value={bill.next_steps} /></td>
+      <td className="py-2 px-3 max-w-[150px]"><EditableCell field="session_comments" value={bill.session_comments} /></td>
+      <td className="py-2 px-3 max-w-[120px]"><EditableCell field="lobbyist" value={bill.lobbyist} /></td>
       <td className="py-2 px-3">
-        {editingField === 'tags' ? (
-          <InlineSelect value={firstTag} options={priorityOptions} onSave={v => { commitEdit('tags', v ? [v] : []); }} onCancel={() => setEditingField(null)} />
+        {bill.bill_documents ? (
+          <span className="text-xs text-primary truncate block max-w-[100px]" title={bill.bill_documents}>{bill.bill_documents}</span>
         ) : (
-          <div onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('tags', firstTag); }}>
-            {firstTag ? <ColorBadge label={firstTag} colorName={priorityColorName} /> : <span className="text-muted-foreground/40 text-xs cursor-pointer">—</span>}
-          </div>
+          <span className="text-muted-foreground/40 text-xs">—</span>
         )}
       </td>
-      <td className="py-2 px-3"><EditableCell field="pc_contact" value={bill.pc_contact} /></td>
-      <td className="py-2 px-3">
-        {bill.google_drive_url ? (
-          <a href={bill.google_drive_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1 text-xs">
-            <FolderOpen className="w-3 h-3" /> Open
-          </a>
+      <td className="py-2 px-3 text-center">
+        {bill.is_caucus_bill ? (
+          <span className="text-xs bg-accent/20 text-accent px-1.5 py-0.5 rounded font-medium">Yes</span>
         ) : (
-          isAdmin && (
-            <span onClick={e => { e.stopPropagation(); startEdit('google_drive_url', ''); }}
-              className="text-muted-foreground/40 hover:text-primary cursor-pointer text-[10px] flex items-center gap-1">
-              <ExternalLink className="w-3 h-3" /> Add
-            </span>
-          )
-        )}
-        {editingField === 'google_drive_url' && (
-          <input autoFocus value={editValue} onChange={e => setEditValue(e.target.value)}
-            onBlur={() => commitEdit('google_drive_url')}
-            onKeyDown={e => { if (e.key === 'Enter') commitEdit('google_drive_url'); if (e.key === 'Escape') setEditingField(null); }}
-            className="w-full text-xs border border-primary rounded px-1.5 py-0.5 bg-white outline-none mt-1"
-            placeholder="https://drive.google.com/..." />
+          <span className="text-muted-foreground/40 text-xs">—</span>
         )}
       </td>
       <td className="py-2 px-3">

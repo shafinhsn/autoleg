@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useOffice } from '@/hooks/useOffice';
-import { Save, Key, Building2 } from 'lucide-react';
+import { Save, Key, Building2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -109,6 +109,21 @@ export default function Settings() {
               Copy
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2 text-destructive">
+            <Trash2 className="w-4 h-4" />
+            Data Management
+          </CardTitle>
+          <CardDescription>Start fresh by clearing all imported data</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" asChild className="w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground">
+            <a href="/clear-data">Clear All Data</a>
+          </Button>
         </CardContent>
       </Card>
 

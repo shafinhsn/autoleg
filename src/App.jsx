@@ -17,6 +17,7 @@ import TeamChat from '@/pages/TeamChat';
 import Settings from '@/pages/Settings';
 import Customize from '@/pages/Customize';
 import Assignments from '@/pages/Assignments';
+import ClearData from '@/pages/ClearData';
 
 
 const OfficeApp = () => {
@@ -47,6 +48,7 @@ const OfficeApp = () => {
         <Route path="/settings" element={<Settings />} />
         <Route path="/customize" element={<Customize />} />
         <Route path="/assignments" element={<Assignments />} />
+        <Route path="/clear-data" element={<ClearData />} />
 
       </Route>
       <Route path="*" element={<PageNotFound />} />
