@@ -9,7 +9,7 @@ export async function syncBill(bill, apiKey) {
   if (!billNum) return false;
 
   const year = bill.session_year || 2026;
-  const key = apiKey || 'tSBEMOLz2kk1HVzenAxZGy64XAMOBJmx';
+  const key = apiKey || 'yn35A5fGALcDVU49eCerQgMoWuRgNbWY';
   const url = `https://legislation.nysenate.gov/api/3/bills/${year}/${billNum}?key=${key}&view=with_refs`;
 
   const resp = await fetch(url);
@@ -101,7 +101,7 @@ export async function syncBill(bill, apiKey) {
  * Returns count of bills updated.
  */
 export async function syncCalendarDates(bills, apiKey) {
-  const key = apiKey || 'tSBEMOLz2kk1HVzenAxZGy64XAMOBJmx';
+  const key = apiKey || 'yn35A5fGALcDVU49eCerQgMoWuRgNbWY';
   const year = new Date().getFullYear();
 
   // Fetch committee meetings for the next 60 days
