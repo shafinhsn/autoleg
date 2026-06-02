@@ -24,6 +24,7 @@ export default function Bills() {
   const [newBillNumber, setNewBillNumber] = useState('');
   const [expandedSections, setExpandedSections] = useState(new Set());
   const [syncing, setSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState(null); // { done, total }
   const [selectedBills, setSelectedBills] = useState(new Set());
   const [deleteResult, setDeleteResult] = useState(null);
 
@@ -179,17 +180,34 @@ export default function Bills() {
   async function handleSync() {
     if (bills.length === 0) return;
     setSyncing(true);
+    const BATCH_SIZE = 25;
+    const allIds = bills.map(b => b.id);
+    const total = allIds.length;
+    let done = 0;
+    let totalUpdated = 0;
+    let totalErrors = 0;
+    let totalSkipped = 0;
+    setSyncProgress({ done: 0, total });
     try {
-      const response = await base44.functions.invoke('syncAllBills', { officeId: office.id });
-      const { updated = 0, errors = 0, skipped = 0, total = 0 } = response.data;
+      for (let i = 0; i < allIds.length; i += BATCH_SIZE) {
+        const batch = allIds.slice(i, i + BATCH_SIZE);
+        const response = await base44.functions.invoke('syncAllBills', { officeId: office.id, billIds: batch });
+        const { updated = 0, errors = 0, skipped = 0 } = response.data;
+        totalUpdated += updated;
+        totalErrors += errors;
+        totalSkipped += skipped;
+        done += batch.length;
+        setSyncProgress({ done, total });
+      }
       await invalidateBills();
       invalidateConfigs();
-      alert(`Sync complete!\n✓ ${updated} bills updated\n⚠ ${errors} errors\n— ${skipped} skipped (not found in API)\nTotal: ${total}`);
+      alert(`Sync complete!\n✓ ${totalUpdated} bills updated\n⚠ ${totalErrors} errors\n— ${totalSkipped} skipped\nTotal: ${total}`);
     } catch (e) {
       console.error('Sync error', e);
       alert('Sync failed: ' + e.message);
     }
     setSyncing(false);
+    setSyncProgress(null);
   }
 
   function getSectionColorFromConfig(colorName) {
@@ -392,9 +410,11 @@ export default function Bills() {
               <Trash2 className="w-4 h-4 mr-1.5" /> Delete {selectedBills.size}
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing} className="min-w-[100px]">
+          <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing} className="min-w-[120px]">
             <RefreshCw className={`w-4 h-4 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Syncing...' : 'Sync'}
+            {syncProgress
+              ? `${Math.round((syncProgress.done / syncProgress.total) * 100)}% (${syncProgress.done}/${syncProgress.total})`
+              : syncing ? 'Syncing...' : 'Sync'}
           </Button>
           <Button variant="outline" size="sm" asChild>
             <Link to="/import"><Upload className="w-4 h-4 mr-1.5" /> Import</Link>

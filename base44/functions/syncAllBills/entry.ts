@@ -7,82 +7,8 @@ function sleep(ms) {
 }
 
 /**
- * Map API statusType + recent actions to a human-readable status label.
- * Also checks action text for advanced/passed signals.
- */
-function deriveStatusLabel(result) {
-    const statusType = result.status?.statusType || '';
-    const statusDesc = result.status?.statusDesc || '';
-    const actions = result.actions?.items || [];
-
-    // Priority order: highest wins. Check ALL actions, pick the highest-priority match found.
-    const priorityOrder = [
-        { test: (t) => t.includes('SIGNED') || t.includes('CHAPTERED'), label: 'Signed' },
-        { test: (t) => t.includes('VETOED') || t.includes('POCKET VETO'), label: 'Vetoed' },
-        { test: (t) => t.includes('RETURNED TO SENATE'), label: 'Passed Assembly' },
-        { test: (t) => t.includes('PASSED ASSEMBLY'), label: 'Passed Assembly' },
-        { test: (t) => t.includes('PASSED SENATE'), label: 'Passed Senate' },
-        { test: (t) => t.includes('DELIVERED TO GOV'), label: 'Delivered to Governor' },
-        { test: (t) => t.includes('ORDERED TO THIRD READING') || t.includes('ADVANCED TO THIRD READING') || t.includes('THIRD READING CAL'), label: 'Ordered to Third Reading' },
-        { test: (t) => t.includes('SUBSTITUTED'), label: 'Substituted' },
-    ];
-
-    for (const priority of priorityOrder) {
-        const found = actions.find(a => priority.test((a.text || '').toUpperCase()));
-        if (found) return priority.label;
-    }
-
-    // Fall back to statusType mapping
-    const typeMap = {
-        'SIGNED_BY_GOV': 'Signed',
-        'VETOED': 'Vetoed',
-        'PASSED_SENATE': 'Passed Senate',
-        'PASSED_ASSEMBLY': 'Passed Assembly',
-        'SENATE_FLOOR': 'Senate Floor Calendar',
-        'ASSEMBLY_FLOOR': 'Assembly Floor Calendar',
-        'IN_SENATE_COMM': 'In Senate Committee',
-        'IN_ASSEMBLY_COMM': 'In Assembly Committee',
-        'DELIVERED_TO_GOV': 'Delivered to Governor',
-        'SUBSTITUTED': 'Substituted',
-    };
-
-    return typeMap[statusType] || statusDesc || null;
-}
-
-/**
- * Ensure a status label exists in the office's TrackerConfig bill_statuses.
- * If not, create/update the config to include it.
- */
-async function ensureStatusTag(base44, officeId, label, officeStatusConfigCache) {
-    const cached = officeStatusConfigCache[officeId];
-    const existingItems = cached?.items || [];
-    if (existingItems.find(i => i.label?.trim().toLowerCase() === label.trim().toLowerCase())) {
-        return; // already exists
-    }
-
-    const newItems = [...existingItems, { label, color: 'Gray', sort_order: existingItems.length }];
-
-    if (cached?.id) {
-        await base44.asServiceRole.entities.TrackerConfig.update(cached.id, { items: newItems });
-    } else {
-        const created = await base44.asServiceRole.entities.TrackerConfig.create({
-            office_id: officeId,
-            config_type: 'bill_statuses',
-            items: newItems,
-        });
-        officeStatusConfigCache[officeId] = created;
-    }
-
-    if (officeStatusConfigCache[officeId]) {
-        officeStatusConfigCache[officeId].items = newItems;
-    }
-}
-
-/**
- * Fetch Assembly bill data from NY Senate Open Legislation API.
- * - Uses Assembly bill number to get: title, assembly committee, current status, assembly sponsor
- * - Looks up Senate companion bill (sameAs) just to extract the senate sponsor name
- * - Returns update payload or null if nothing found
+ * Fetch bill data from NY Senate Open Legislation API.
+ * Only updates: title, latest_status, assembly_sponsor, senate_sponsor, linked_senate_bill
  */
 async function fetchBillFromAPI(bill, apiKey) {
     const billNum = bill.bill_number?.trim().toUpperCase();
@@ -92,7 +18,6 @@ async function fetchBillFromAPI(bill, apiKey) {
 
     const key = apiKey || DEFAULT_API_KEY;
 
-    // Try session years 2025 then 2026 (2025-2026 session bills are keyed under 2025 in the API)
     let result = null;
     for (const year of [2025, 2026]) {
         const url = `https://legislation.nysenate.gov/api/3/bills/${year}/${billNum}?key=${key}&view=with_refs`;
@@ -109,54 +34,51 @@ async function fetchBillFromAPI(bill, apiKey) {
 
     const updateData = {};
 
-    // Title — always overwrite from API
+    // Title
     if (result.title) {
         updateData.title = result.title;
     }
 
-    // Assembly committee — from status.committeeName (this is the current active committee)
-    if (result.status?.committeeName) {
-        updateData.committee = [result.status.committeeName];
-    } else {
-        updateData.committee = [];
-    }
+    // Status — derive from statusType only (simple, no side effects)
+    const statusType = result.status?.statusType || '';
+    const statusDesc = result.status?.statusDesc || '';
+    const typeMap = {
+        'SIGNED_BY_GOV': 'Signed',
+        'VETOED': 'Vetoed',
+        'PASSED_SENATE': 'Passed Senate',
+        'PASSED_ASSEMBLY': 'Passed Assembly',
+        'SENATE_FLOOR': 'Senate Floor Calendar',
+        'ASSEMBLY_FLOOR': 'Assembly Floor Calendar',
+        'IN_SENATE_COMM': 'In Senate Committee',
+        'IN_ASSEMBLY_COMM': 'In Assembly Committee',
+        'DELIVERED_TO_GOV': 'Delivered to Governor',
+        'SUBSTITUTED': 'Substituted',
+    };
 
-    // If the bill was substituted, fetch the substitute bill's actions too for a better status
-    const substituteAction = (result.actions?.items || []).find(a => 
-        (a.text || '').toUpperCase().includes('SUBSTITUTED BY')
-    );
-    if (substituteAction) {
-        const subBillMatch = substituteAction.text.match(/SUBSTITUTED BY (\w+)/i);
-        if (subBillMatch) {
-            const subBillNum = subBillMatch[1];
-            try {
-                for (const year of [2025, 2026]) {
-                    const subUrl = `https://legislation.nysenate.gov/api/3/bills/${year}/${subBillNum}?key=${key}&view=with_refs`;
-                    const subResp = await fetch(subUrl);
-                    if (subResp.ok) {
-                        const subData = await subResp.json();
-                        if (subData.success && subData.result) {
-                            // Merge substitute bill's actions into result for status derivation
-                            const subActions = subData.result.actions?.items || [];
-                            result = { ...result, actions: { items: [...(result.actions?.items || []), ...subActions] } };
-                            break;
-                        }
-                    }
-                }
-            } catch (e) {
-                console.error(`Substitute bill ${subBillNum} lookup failed: ${e.message}`);
-            }
-        }
-    }
+    // Also check action history for advanced statuses
+    const actions = result.actions?.items || [];
+    const actionPriority = [
+        { test: (t) => t.includes('SIGNED') || t.includes('CHAPTERED'), label: 'Signed' },
+        { test: (t) => t.includes('VETOED') || t.includes('POCKET VETO'), label: 'Vetoed' },
+        { test: (t) => t.includes('RETURNED TO SENATE') || t.includes('PASSED ASSEMBLY'), label: 'Passed Assembly' },
+        { test: (t) => t.includes('PASSED SENATE'), label: 'Passed Senate' },
+        { test: (t) => t.includes('DELIVERED TO GOV'), label: 'Delivered to Governor' },
+        { test: (t) => t.includes('ORDERED TO THIRD READING') || t.includes('ADVANCED TO THIRD READING') || t.includes('THIRD READING CAL'), label: 'Ordered to Third Reading' },
+        { test: (t) => t.includes('SUBSTITUTED'), label: 'Substituted' },
+    ];
 
-    // Current status — derive a meaningful label from status type + action history
-    const statusLabel = deriveStatusLabel(result);
+    let statusLabel = null;
+    for (const priority of actionPriority) {
+        const found = actions.find(a => priority.test((a.text || '').toUpperCase()));
+        if (found) { statusLabel = priority.label; break; }
+    }
+    if (!statusLabel) statusLabel = typeMap[statusType] || statusDesc || null;
+
     if (statusLabel) {
         updateData.latest_status = [statusLabel];
-        updateData._derivedStatusLabel = statusLabel; // passed through for tag ensurance
     }
 
-    // Assembly sponsor — from the bill's own sponsor field
+    // Assembly sponsor
     if (billNum.startsWith('A')) {
         const m = result.sponsor?.member;
         if (m) {
@@ -164,7 +86,6 @@ async function fetchBillFromAPI(bill, apiKey) {
             if (name) updateData.assembly_sponsor = name;
         }
     } else {
-        // Senate bill — sponsor goes to senate_sponsor
         const m = result.sponsor?.member;
         if (m) {
             const name = m.fullName || `${m.firstName || ''} ${m.lastName || ''}`.trim() || m.shortName;
@@ -172,11 +93,10 @@ async function fetchBillFromAPI(bill, apiKey) {
         }
     }
 
-    // For Assembly bills: find Senate companion (sameAs) and grab ONLY their sponsor name
+    // For Assembly bills: find Senate companion sponsor name only
     if (billNum.startsWith('A')) {
         try {
             const amendments = result.amendments?.items || {};
-            // Try latest amendment version first, then fall back to base version
             const versionKeys = Object.keys(amendments).sort().reverse();
             let senateBillNum = null;
             let senateBillSession = null;
@@ -217,36 +137,31 @@ Deno.serve(async (req) => {
         const base44 = createClientFromRequest(req);
 
         let officeId = null;
+        let billIds = null; // optional: sync only specific bill IDs (for batching)
         try {
             const body = await req.clone().json();
             officeId = body?.officeId || null;
+            billIds = body?.billIds || null;
         } catch { /* scheduled call — no body */ }
 
         let billsToSync = [];
-        // Cache of { officeId -> TrackerConfig record } to avoid repeated fetches
-        const officeStatusConfigCache = {};
 
         if (officeId) {
             const offices = await base44.asServiceRole.entities.Office.filter({ id: officeId });
             const apiKey = offices[0]?.senate_api_key || DEFAULT_API_KEY;
             const bills = await base44.asServiceRole.entities.Bill.filter({ office_id: officeId });
-            billsToSync = bills.map(b => ({ ...b, _apiKey: apiKey }));
-            // Pre-load status config for this office
-            const configs = await base44.asServiceRole.entities.TrackerConfig.filter({ office_id: officeId, config_type: 'bill_statuses' });
-            if (configs[0]) officeStatusConfigCache[officeId] = configs[0];
+            const filtered = billIds ? bills.filter(b => billIds.includes(b.id)) : bills;
+            billsToSync = filtered.map(b => ({ ...b, _apiKey: apiKey }));
         } else {
             const offices = await base44.asServiceRole.entities.Office.list();
             for (const office of offices) {
                 const apiKey = office.senate_api_key || DEFAULT_API_KEY;
                 const bills = await base44.asServiceRole.entities.Bill.filter({ office_id: office.id });
                 billsToSync.push(...bills.map(b => ({ ...b, _apiKey: apiKey })));
-                // Pre-load status config for each office
-                const configs = await base44.asServiceRole.entities.TrackerConfig.filter({ office_id: office.id, config_type: 'bill_statuses' });
-                if (configs[0]) officeStatusConfigCache[office.id] = configs[0];
             }
         }
 
-        console.log(`Starting sequential sync for ${billsToSync.length} bills`);
+        console.log(`Starting sync for ${billsToSync.length} bills`);
 
         let updated = 0;
         let errors = 0;
@@ -257,31 +172,26 @@ Deno.serve(async (req) => {
                 const updateData = await fetchBillFromAPI(bill, bill._apiKey);
 
                 if (updateData) {
-                    // Ensure the derived status label exists as a tag in TrackerConfig
-                    if (updateData._derivedStatusLabel) {
-                        await ensureStatusTag(base44, bill.office_id, updateData._derivedStatusLabel, officeStatusConfigCache);
-                        delete updateData._derivedStatusLabel;
-                    }
-                    await sleep(300); // throttle SDK writes
+                    await sleep(150);
                     await base44.asServiceRole.entities.Bill.update(bill.id, updateData);
-                    console.log(`✓ ${bill.bill_number}: status=${JSON.stringify(updateData.latest_status)}, committee=${JSON.stringify(updateData.committee)}, assembly_sponsor="${updateData.assembly_sponsor || ''}", senate_sponsor="${updateData.senate_sponsor || ''}"`);
+                    console.log(`✓ ${bill.bill_number}`);
                     updated++;
                 } else {
                     skipped++;
-                    console.log(`- ${bill.bill_number}: not found in API, skipped`);
+                    console.log(`- ${bill.bill_number}: not found`);
                 }
 
-                await sleep(200); // throttle Senate API requests
+                await sleep(150);
             } catch (err) {
                 errors++;
                 console.error(`✗ ${bill.bill_number}: ${err.message}`);
-                if (err.message?.includes('Rate limit') || err.message?.includes('429')) {
+                if (err.message?.includes('429')) {
                     await sleep(3000);
                 }
             }
         }
 
-        console.log(`Sync done: ${updated} updated, ${skipped} not found, ${errors} errors / ${billsToSync.length} total`);
+        console.log(`Sync done: ${updated} updated, ${skipped} skipped, ${errors} errors / ${billsToSync.length} total`);
         return Response.json({ success: true, updated, errors, skipped, total: billsToSync.length });
 
     } catch (error) {

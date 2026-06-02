@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useOffice } from '@/hooks/useOffice';
-import { Plus, Trash2, Upload, FileText, AlertTriangle, Clock, CheckCircle2, ExternalLink } from 'lucide-react';
+import { Plus, Trash2, Upload, FileText, AlertTriangle, Clock, CheckCircle2, ExternalLink, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -29,6 +29,7 @@ export default function Assignments() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [uploadingFor, setUploadingFor] = useState(null);
+  const [search, setSearch] = useState('');
   const [form, setForm] = useState({
     title: '', description: '', assigned_to: '', due_date: '',
     urgency: 'medium', bill_id: '',
@@ -105,9 +106,20 @@ export default function Assignments() {
   }
 
   const urgencyOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
-  const sorted = [...myAssignments].sort((a, b) =>
-    (urgencyOrder[a.urgency] ?? 2) - (urgencyOrder[b.urgency] ?? 2)
-  );
+  const sorted = [...myAssignments]
+    .sort((a, b) => (urgencyOrder[a.urgency] ?? 2) - (urgencyOrder[b.urgency] ?? 2))
+    .filter(a => {
+      if (!search.trim()) return true;
+      const q = search.toLowerCase();
+      const linkedBill = bills.find(b => b.id === a.bill_id);
+      return (
+        a.title?.toLowerCase().includes(q) ||
+        a.description?.toLowerCase().includes(q) ||
+        a.assigned_to?.toLowerCase().includes(q) ||
+        linkedBill?.bill_number?.toLowerCase().includes(q) ||
+        linkedBill?.short_name?.toLowerCase().includes(q)
+      );
+    });
 
   return (
     <div className="space-y-6">
@@ -118,11 +130,22 @@ export default function Assignments() {
             {isAdmin ? 'Create and manage assignments for your team' : 'Your assigned tasks and documents'}
           </p>
         </div>
-        {isAdmin && (
-          <Button size="sm" onClick={() => setShowForm(!showForm)}>
-            <Plus className="w-4 h-4 mr-1.5" /> New Assignment
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search assignments..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="pl-8 h-9 text-sm w-52"
+            />
+          </div>
+          {isAdmin && (
+            <Button size="sm" onClick={() => setShowForm(!showForm)}>
+              <Plus className="w-4 h-4 mr-1.5" /> New Assignment
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Create Form - Admins/Directors only */}
