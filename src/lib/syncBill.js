@@ -5,6 +5,36 @@
  * extracts committee and status from the Assembly bill data.
  * Returns update data object if changes found, null otherwise.
  */
+
+function toStringArray(value) {
+  if (value == null || value === '') return [];
+  if (Array.isArray(value)) return value.map(String).map(s => s.trim()).filter(Boolean);
+  return [String(value).trim()].filter(Boolean);
+}
+
+/** Normalize sync payload to match Bill entity schema (arrays for committee/status). */
+export function normalizeSyncUpdateData(data) {
+  if (!data || typeof data !== 'object') return null;
+
+  const normalized = { ...data };
+
+  if (normalized.committee !== undefined) {
+    normalized.committee = toStringArray(normalized.committee);
+    if (normalized.committee.length === 0) delete normalized.committee;
+  }
+
+  if (normalized.latest_status !== undefined) {
+    normalized.latest_status = toStringArray(normalized.latest_status);
+    if (normalized.latest_status.length === 0) delete normalized.latest_status;
+  }
+
+  if (normalized.hearing_date == null || normalized.hearing_date === '') {
+    delete normalized.hearing_date;
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
 export async function syncBill(bill, apiKey) {
   const billNum = bill.bill_number?.trim().toUpperCase();
   if (!billNum) return null;
@@ -34,7 +64,9 @@ export async function syncBill(bill, apiKey) {
   const updateData = {};
 
   // Update title
-  updateData.title = result.title || bill.title || '';
+  if (result.title) {
+    updateData.title = result.title;
+  }
   
   // Extract ALL statuses from actions (not just current status)
   const actions = result.actions?.items || [];
@@ -66,9 +98,17 @@ export async function syncBill(bill, apiKey) {
     }
   });
   
-  updateData.latest_status = Array.from(statusSet);
-  updateData.committee = result.status?.committeeName || '';
-  updateData.hearing_date = hearingDate;
+  if (statusSet.size > 0) {
+    updateData.latest_status = Array.from(statusSet);
+  }
+
+  if (result.status?.committeeName) {
+    updateData.committee = [result.status.committeeName];
+  }
+
+  if (hearingDate) {
+    updateData.hearing_date = hearingDate;
+  }
   
   console.log(`${billNum} extracted statuses:`, updateData.latest_status);
   console.log(`${billNum} committee:`, updateData.committee);
@@ -126,6 +166,7 @@ export async function syncBill(bill, apiKey) {
     }
   }
 
-  console.log(`${billNum} final updateData:`, JSON.stringify(updateData, null, 2));
-  return Object.keys(updateData).length > 0 ? updateData : null;
+  const normalized = normalizeSyncUpdateData(updateData);
+  console.log(`${billNum} final updateData:`, JSON.stringify(normalized, null, 2));
+  return normalized;
 }

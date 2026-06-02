@@ -194,6 +194,9 @@ export default function Bills() {
         const updateData = await syncBill(bill, apiKey);
         console.log(`${bill.bill_number} updateData:`, updateData);
         if (updateData && Object.keys(updateData).length > 0) {
+          qc.setQueryData(['bills', office?.id], (old = []) =>
+            old.map(b => b.id === bill.id ? { ...b, ...updateData } : b)
+          );
           await base44.entities.Bill.update(bill.id, updateData);
           console.log(`${bill.bill_number} updated successfully`);
           updatedCount++;

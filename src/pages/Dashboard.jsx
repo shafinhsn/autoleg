@@ -48,7 +48,10 @@ export default function Dashboard() {
   const priorityBills = bills.filter(b => b.tags?.length > 0).length;
 
   const committeeMap = {};
-  bills.forEach(b => { if (b.committee) committeeMap[b.committee] = (committeeMap[b.committee] || 0) + 1; });
+  bills.forEach(b => {
+    const committees = Array.isArray(b.committee) ? b.committee : (b.committee ? [b.committee] : []);
+    committees.forEach(c => { if (c) committeeMap[c] = (committeeMap[c] || 0) + 1; });
+  });
   const committeeData = Object.entries(committeeMap).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([name, count]) => ({ name, count }));
 
   const statusMap = {};
