@@ -324,7 +324,6 @@ export default function Bills() {
             <th className="py-2 px-3 font-medium">Next Steps</th>
             <th className="py-2 px-3 font-medium">Session Comments</th>
             <th className="py-2 px-3 font-medium">Lobbyist</th>
-            <th className="py-2 px-3 font-medium">Documents</th>
             <th className="py-2 px-3 font-medium">Drive Link</th>
             <th className="py-2 px-3 font-medium">Caucus</th>
             <th className="py-2 px-3 w-10"></th>

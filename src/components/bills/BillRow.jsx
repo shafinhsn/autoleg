@@ -214,14 +214,32 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
       <td className="py-2 px-3 max-w-[120px]"><EditableCell field="next_steps" value={bill.next_steps} /></td>
       <td className="py-2 px-3 max-w-[150px]"><EditableCell field="session_comments" value={bill.session_comments} /></td>
       <td className="py-2 px-3 max-w-[120px]"><EditableCell field="lobbyist" value={bill.lobbyist} /></td>
-      <td className="py-2 px-3">
-        {bill.bill_documents ? (
-          <span className="text-xs text-primary truncate block max-w-[100px]" title={bill.bill_documents}>{bill.bill_documents}</span>
+      <td className="py-2 px-3 max-w-[150px]">
+        {editingField === 'google_drive_url' ? (
+          <input autoFocus value={editValue}
+            onChange={e => setEditValue(e.target.value)}
+            onBlur={() => commitEdit('google_drive_url')}
+            onKeyDown={e => { if (e.key === 'Enter') commitEdit('google_drive_url'); if (e.key === 'Escape') setEditingField(null); }}
+            className="w-full text-xs border border-primary rounded px-1.5 py-0.5 bg-white outline-none min-w-[120px]"
+            placeholder="https://..."
+          />
+        ) : bill.google_drive_url ? (
+          <div className="flex items-center gap-1">
+            <a href={bill.google_drive_url} target="_blank" rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              className="text-xs text-primary hover:underline truncate max-w-[100px]" title={bill.google_drive_url}>
+              Drive
+            </a>
+            {isAdmin && (
+              <span onClick={e => { e.preventDefault(); e.stopPropagation(); startEdit('google_drive_url', bill.google_drive_url); }}
+                className="text-muted-foreground/40 hover:text-muted-foreground cursor-pointer text-[10px]">✎</span>
+            )}
+          </div>
         ) : (
-          <span className="text-muted-foreground/40 text-xs">—</span>
+          <span onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('google_drive_url', ''); }}
+            className={`text-muted-foreground/40 text-xs ${isAdmin ? 'cursor-text hover:text-muted-foreground' : ''}`}>—</span>
         )}
       </td>
-      <td className="py-2 px-3 max-w-[150px]"><EditableCell field="google_drive_url" value={bill.google_drive_url} /></td>
       <td className="py-2 px-3 text-center">
         {bill.is_caucus_bill ? (
           <span className="text-xs bg-accent/20 text-accent px-1.5 py-0.5 rounded font-medium">Yes</span>

@@ -4,12 +4,11 @@ Deno.serve(async (req) => {
     try {
         const base44 = createClientFromRequest(req);
 
-        // Accept optional officeId from frontend calls; fall back to all offices for scheduled runs
         let officeId = null;
         try {
             const body = await req.clone().json();
             officeId = body?.officeId || null;
-        } catch { /* no body or not JSON — scheduled call */ }
+        } catch { /* scheduled call */ }
 
         let billsToSync = [];
         const DEFAULT_API_KEY = '5OuWFvXYcEmkPHLLaRPiHDHbVgnamYTL';
@@ -28,25 +27,39 @@ Deno.serve(async (req) => {
             }
         }
 
-        console.log(`Syncing ${billsToSync.length} bills`);
+        console.log(`Syncing ${billsToSync.length} bills in parallel batches`);
+
+        // Process in parallel batches of 5 to avoid timeouts and rate limits
+        const BATCH_SIZE = 5;
         let updated = 0;
         let errors = 0;
 
-        for (const bill of billsToSync) {
-            try {
-                const updateData = await fetchBillUpdate(bill, bill._apiKey);
-                if (updateData && Object.keys(updateData).length > 0) {
-                    await base44.asServiceRole.entities.Bill.update(bill.id, updateData);
-                    updated++;
-                    console.log(`✓ ${bill.bill_number}: updated (committee=${updateData.committee}, status=${updateData.latest_status})`);
-                } else {
-                    console.log(`- ${bill.bill_number}: no changes`);
+        for (let i = 0; i < billsToSync.length; i += BATCH_SIZE) {
+            const batch = billsToSync.slice(i, i + BATCH_SIZE);
+            const results = await Promise.allSettled(
+                batch.map(async (bill) => {
+                    const updateData = await fetchBillUpdate(bill, bill._apiKey);
+                    if (updateData && Object.keys(updateData).length > 0) {
+                        await base44.asServiceRole.entities.Bill.update(bill.id, updateData);
+                        console.log(`✓ ${bill.bill_number}: committee=${JSON.stringify(updateData.committee)}, status=${JSON.stringify(updateData.latest_status)}`);
+                        return 'updated';
+                    }
+                    return 'no-change';
+                })
+            );
+
+            for (const r of results) {
+                if (r.status === 'fulfilled' && r.value === 'updated') updated++;
+                else if (r.status === 'rejected') {
+                    errors++;
+                    console.error(`✗ batch error: ${r.reason?.message}`);
                 }
-            } catch (e) {
-                errors++;
-                console.error(`✗ ${bill.bill_number}: ${e.message}`);
             }
-            await new Promise(r => setTimeout(r, 300));
+
+            // Small delay between batches to respect rate limits
+            if (i + BATCH_SIZE < billsToSync.length) {
+                await new Promise(r => setTimeout(r, 200));
+            }
         }
 
         console.log(`Sync complete: ${updated} updated, ${errors} errors out of ${billsToSync.length}`);
@@ -93,7 +106,7 @@ async function fetchBillUpdate(bill, apiKey) {
         updateData.latest_status = Array.isArray(s) ? s : [s];
     }
 
-    // Only fill title / sponsor if the field is currently empty in the DB
+    // Only fill title / sponsor if currently empty
     if (!bill.title && result.title) {
         updateData.title = result.title;
     }
