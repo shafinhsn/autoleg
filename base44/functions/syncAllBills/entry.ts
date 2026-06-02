@@ -39,6 +39,9 @@ async function fetchBillFromAPI(bill, apiKey) {
         updateData.title = result.title;
     }
 
+    // Committee — always overwrite with what the API says (replaces any manually added tags)
+    updateData.committee = result.status?.committeeName ? [result.status.committeeName] : [];
+
     // Status — derive from statusType only (simple, no side effects)
     const statusType = result.status?.statusType || '';
     const statusDesc = result.status?.statusDesc || '';
