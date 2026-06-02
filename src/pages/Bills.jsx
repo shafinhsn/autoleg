@@ -24,7 +24,6 @@ export default function Bills() {
   const [newBillNumber, setNewBillNumber] = useState('');
   const [expandedSections, setExpandedSections] = useState(new Set());
   const [syncing, setSyncing] = useState(false);
-  const [syncProgress, setSyncProgress] = useState({ current: 0, total: 0, percent: 0 });
   const [selectedBills, setSelectedBills] = useState(new Set());
   const [deleteResult, setDeleteResult] = useState(null);
 
@@ -180,19 +179,17 @@ export default function Bills() {
   async function handleSync() {
     if (bills.length === 0) return;
     setSyncing(true);
-    setSyncProgress({ current: 0, total: bills.length, percent: 50 });
     try {
       const response = await base44.functions.invoke('syncAllBills', { officeId: office.id });
-      const { updated = 0, errors = 0, total = 0 } = response.data;
+      const { updated = 0, errors = 0, skipped = 0, total = 0 } = response.data;
       await invalidateBills();
       invalidateConfigs();
-      alert(`Sync complete: ${updated} bills updated, ${errors} errors out of ${total}`);
+      alert(`Sync complete!\n✓ ${updated} bills updated\n⚠ ${errors} errors\n— ${skipped} skipped (not found in API)\nTotal: ${total}`);
     } catch (e) {
       console.error('Sync error', e);
       alert('Sync failed: ' + e.message);
     }
     setSyncing(false);
-    setSyncProgress({ current: 0, total: 0, percent: 0 });
   }
 
   function getSectionColorFromConfig(colorName) {
@@ -397,7 +394,7 @@ export default function Bills() {
           )}
           <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing} className="min-w-[100px]">
             <RefreshCw className={`w-4 h-4 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? `${syncProgress.percent}%` : 'Sync'}
+            {syncing ? 'Syncing...' : 'Sync'}
           </Button>
           <Button variant="outline" size="sm" asChild>
             <Link to="/import"><Upload className="w-4 h-4 mr-1.5" /> Import</Link>
