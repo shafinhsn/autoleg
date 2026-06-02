@@ -55,7 +55,7 @@ function ColorBadge({ label, colorName, onClick }) {
 }
 
 // Multi-select dropdown for tags/statuses/committees
-function MultiSelectDropdown({ currentValues, options, onSave, onCancel, placeholder }) {
+function MultiSelectDropdown({ currentValues, options, onSave, onCancel }) {
   const [selected, setSelected] = useState(currentValues || []);
   
   function toggleOption(opt) {
@@ -65,29 +65,40 @@ function MultiSelectDropdown({ currentValues, options, onSave, onCancel, placeho
     );
   }
   
+  function handleSave() {
+    onSave(selected);
+  }
+  
   return (
-    <div className="absolute z-50 bg-white border border-border rounded-md shadow-lg -left-1 mt-1 min-w-[160px] max-w-[220px]">
-      <div className="max-h-40 overflow-y-auto py-1">
+    <div className="absolute z-50 bg-white border border-border rounded-lg shadow-xl -left-2 mt-1 min-w-[180px] max-w-[240px]">
+      <div className="max-h-48 overflow-y-auto p-1">
         {options.map(opt => (
           <button
             key={opt}
             onClick={() => toggleOption(opt)}
-            className={`w-full text-left px-2.5 py-1.5 text-xs ${
+            className={`w-full text-left px-2 py-1.5 text-xs rounded ${
               selected.includes(opt) 
-                ? 'bg-primary/10 text-primary font-medium' 
-                : 'text-foreground hover:bg-muted/50'
+                ? 'bg-primary text-primary-foreground' 
+                : 'hover:bg-muted'
             }`}
           >
-            <div className="flex items-center gap-2">
-              <div className={`w-3 h-3 rounded border flex items-center justify-center ${
-                selected.includes(opt) ? 'bg-primary border-primary' : 'border-border'
-              }`}>
-                {selected.includes(opt) && <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 12 12"><path d="M4 8L1 5l1-1 3 3 6-6 1 1z"/></svg>}
-              </div>
-              <span className="truncate">{opt}</span>
-            </div>
+            {opt}
           </button>
         ))}
+      </div>
+      <div className="border-t p-2 flex gap-2">
+        <button 
+          onClick={handleSave}
+          className="flex-1 bg-primary text-primary-foreground text-xs py-1 rounded hover:opacity-90"
+        >
+          Done
+        </button>
+        <button 
+          onClick={onCancel}
+          className="flex-1 bg-muted text-muted-foreground text-xs py-1 rounded hover:opacity-80"
+        >
+          Cancel
+        </button>
       </div>
     </div>
   );
