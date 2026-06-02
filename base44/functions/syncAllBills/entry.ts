@@ -63,11 +63,11 @@ async function fetchBillFromAPI(bill, apiKey) {
     const actionPriority = [
         { test: (t) => t.includes('SIGNED') || t.includes('CHAPTERED'), label: 'Signed' },
         { test: (t) => t.includes('VETOED') || t.includes('POCKET VETO'), label: 'Vetoed' },
+        { test: (t) => t.includes('DELIVERED TO GOV'), label: 'Delivered to Governor' },
         { test: (t) => t.includes('RETURNED TO SENATE') || t.includes('PASSED ASSEMBLY'), label: 'Passed Assembly' },
         { test: (t) => t.includes('PASSED SENATE'), label: 'Passed Senate' },
-        { test: (t) => t.includes('DELIVERED TO GOV'), label: 'Delivered to Governor' },
-        { test: (t) => t.includes('ORDERED TO THIRD READING') || t.includes('ADVANCED TO THIRD READING') || t.includes('THIRD READING CAL'), label: 'Ordered to Third Reading' },
         { test: (t) => t.includes('SUBSTITUTED'), label: 'Substituted' },
+        { test: (t) => t.includes('ORDERED TO THIRD READING') || t.includes('ADVANCED TO THIRD READING') || t.includes('THIRD READING CAL'), label: 'Ordered to Third Reading' },
     ];
 
     let statusLabel = null;
