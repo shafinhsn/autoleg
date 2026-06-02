@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
-import { Trash2, FolderOpen, ExternalLink, X } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 
 const COLOR_CLASSES = {
   Red:    { bg: 'bg-red-100',    text: 'text-red-700',    border: 'border-red-200' },
@@ -54,32 +55,46 @@ function ColorBadge({ label, colorName, onClick }) {
   );
 }
 
-// Multi-select dropdown for tags/statuses/committees
-function MultiSelectDropdown({ currentValues, options, onSave, onCancel }) {
+// Multi-select dropdown — renders in a portal so it never gets clipped by the table
+function MultiSelectDropdown({ anchorEl, currentValues, options, onSave, onCancel }) {
   const [selected, setSelected] = useState(currentValues || []);
-  
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 200 });
+
+  useEffect(() => {
+    if (anchorEl) {
+      const rect = anchorEl.getBoundingClientRect();
+      setPos({
+        top: rect.bottom + window.scrollY + 4,
+        left: rect.left + window.scrollX,
+        width: Math.max(rect.width, 200),
+      });
+    }
+  }, [anchorEl]);
+
+  // Close on outside click
+  useEffect(() => {
+    function handleClick(e) {
+      if (anchorEl && !anchorEl.contains(e.target)) onCancel();
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [anchorEl, onCancel]);
+
   function toggleOption(opt) {
-    setSelected(selected.includes(opt) 
-      ? selected.filter(s => s !== opt)
-      : [...selected, opt]
-    );
+    setSelected(prev => prev.includes(opt) ? prev.filter(s => s !== opt) : [...prev, opt]);
   }
-  
-  function handleSave() {
-    onSave(selected);
-  }
-  
-  return (
-    <div className="absolute z-50 bg-white border border-border rounded-lg shadow-xl left-0 top-full mt-1 min-w-[180px] max-w-[240px]">
+
+  return createPortal(
+    <div
+      style={{ position: 'absolute', top: pos.top, left: pos.left, minWidth: pos.width, zIndex: 9999 }}
+      className="bg-white border border-border rounded-lg shadow-xl"
+      onMouseDown={e => e.stopPropagation()}
+    >
       <div className="max-h-48 overflow-y-auto p-1">
         {options.map(opt => (
-          <button
-            key={opt}
-            onClick={() => toggleOption(opt)}
+          <button key={opt} onClick={() => toggleOption(opt)}
             className={`w-full text-left px-2 py-1.5 text-xs rounded ${
-              selected.includes(opt) 
-                ? 'bg-primary text-primary-foreground' 
-                : 'hover:bg-muted'
+              selected.includes(opt) ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
             }`}
           >
             {opt}
@@ -87,26 +102,26 @@ function MultiSelectDropdown({ currentValues, options, onSave, onCancel }) {
         ))}
       </div>
       <div className="border-t p-2 flex gap-2">
-        <button 
-          onClick={handleSave}
-          className="flex-1 bg-primary text-primary-foreground text-xs py-1 rounded hover:opacity-90"
-        >
+        <button onClick={() => onSave(selected)}
+          className="flex-1 bg-primary text-primary-foreground text-xs py-1 rounded hover:opacity-90">
           Done
         </button>
-        <button 
-          onClick={onCancel}
-          className="flex-1 bg-muted text-muted-foreground text-xs py-1 rounded hover:opacity-80"
-        >
+        <button onClick={onCancel}
+          className="flex-1 bg-muted text-muted-foreground text-xs py-1 rounded hover:opacity-80">
           Cancel
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
 export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, onToggleSelect, priorityItems, statusItems, committeeItems, uniqueStatuses, uniqueCommittees }) {
   const [editingField, setEditingField] = useState(null);
   const [editValue, setEditValue] = useState('');
+  const tagsAnchorRef = useRef(null);
+  const committeeAnchorRef = useRef(null);
+  const statusAnchorRef = useRef(null);
 
   function startEdit(field, value) { setEditingField(field); setEditValue(value || ''); }
   function commitEdit(field, value) {
@@ -155,19 +170,14 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
         {bill.is_caucus_bill && <span className="ml-1 text-[9px] bg-accent/20 text-accent px-1 rounded font-medium">C</span>}
       </td>
       <td className="py-2 px-3">
-        {editingField === 'tags' ? (
-          <MultiSelectDropdown 
-            currentValues={billTags} 
-            options={priorityOptions} 
-            onSave={v => { commitEdit('tags', v); }} 
-            onCancel={() => setEditingField(null)} 
-          />
-        ) : (
-          <div onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('tags', billTags); }} className="flex flex-wrap gap-1">
-            {billTags.length > 0 ? billTags.map(tag => (
-              <ColorBadge key={tag} label={tag} colorName={priorityItems?.find(i => i.label === tag)?.color || DEFAULT_PRIORITY_COLORS[tag] || 'Purple'} />
-            )) : <span className="text-muted-foreground/40 text-xs cursor-pointer">—</span>}
-          </div>
+        <div ref={tagsAnchorRef} onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('tags', billTags); }} className="flex flex-wrap gap-1 cursor-pointer">
+          {billTags.length > 0 ? billTags.map(tag => (
+            <ColorBadge key={tag} label={tag} colorName={priorityItems?.find(i => i.label === tag)?.color || DEFAULT_PRIORITY_COLORS[tag] || 'Purple'} />
+          )) : <span className="text-muted-foreground/40 text-xs">—</span>}
+        </div>
+        {editingField === 'tags' && (
+          <MultiSelectDropdown anchorEl={tagsAnchorRef.current} currentValues={billTags} options={priorityOptions}
+            onSave={v => commitEdit('tags', v)} onCancel={() => setEditingField(null)} />
         )}
       </td>
       <td className="py-2 px-3 max-w-[100px]"><EditableCell field="section_85" value={bill.section_85} /></td>
@@ -179,39 +189,25 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
       <td className="py-2 px-3 max-w-[100px]"><EditableCell field="short_name" value={bill.short_name} /></td>
       <td className="py-2 px-3 whitespace-nowrap"><EditableCell field="senate_sponsor" value={bill.senate_sponsor} /></td>
       <td className="py-2 px-3">
-        {editingField === 'committee' ? (
-          <MultiSelectDropdown 
-            currentValues={Array.isArray(bill.committee) ? bill.committee : (bill.committee ? [bill.committee] : [])} 
-            options={committeeOptions} 
-            onSave={v => { commitEdit('committee', v); }} 
-            onCancel={() => setEditingField(null)} 
-          />
-        ) : (
-          <div onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('committee', bill.committee); }} className="flex flex-wrap gap-1">
-            {(Array.isArray(bill.committee) ? bill.committee : (bill.committee ? [bill.committee] : [])).length > 0 ? 
-              (Array.isArray(bill.committee) ? bill.committee : (bill.committee ? [bill.committee] : [])).map(comm => (
-                <span key={comm} className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border ${isAdmin ? 'cursor-pointer hover:opacity-80' : ''} bg-sky-100 text-sky-700 border-sky-200`}>
-                  {comm}
-                </span>
-              )) : <span className="text-muted-foreground/40 text-xs cursor-pointer">—</span>
-            }
-          </div>
+        <div ref={committeeAnchorRef} onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('committee', bill.committee); }} className="flex flex-wrap gap-1 cursor-pointer">
+          {billCommittees.length > 0 ? billCommittees.map(comm => (
+            <span key={comm} className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border bg-sky-100 text-sky-700 border-sky-200`}>{comm}</span>
+          )) : <span className="text-muted-foreground/40 text-xs">—</span>}
+        </div>
+        {editingField === 'committee' && (
+          <MultiSelectDropdown anchorEl={committeeAnchorRef.current} currentValues={billCommittees} options={committeeOptions}
+            onSave={v => commitEdit('committee', v)} onCancel={() => setEditingField(null)} />
         )}
       </td>
       <td className="py-2 px-3">
-        {editingField === 'latest_status' ? (
-          <MultiSelectDropdown 
-            currentValues={billStatuses} 
-            options={statusOptions} 
-            onSave={v => { commitEdit('latest_status', v); }} 
-            onCancel={() => setEditingField(null)} 
-          />
-        ) : (
-          <div onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('latest_status', ''); }} className="flex flex-wrap gap-1">
-            {billStatuses.length > 0 ? billStatuses.map(status => (
-              <ColorBadge key={status} label={status} colorName={statusItems?.find(i => i.label === status)?.color || DEFAULT_STATUS_COLORS[status] || 'Gray'} />
-            )) : <span className="text-muted-foreground/40 text-xs cursor-pointer">—</span>}
-          </div>
+        <div ref={statusAnchorRef} onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('latest_status', ''); }} className="flex flex-wrap gap-1 cursor-pointer">
+          {billStatuses.length > 0 ? billStatuses.map(status => (
+            <ColorBadge key={status} label={status} colorName={statusItems?.find(i => i.label === status)?.color || DEFAULT_STATUS_COLORS[status] || 'Gray'} />
+          )) : <span className="text-muted-foreground/40 text-xs">—</span>}
+        </div>
+        {editingField === 'latest_status' && (
+          <MultiSelectDropdown anchorEl={statusAnchorRef.current} currentValues={billStatuses} options={statusOptions}
+            onSave={v => commitEdit('latest_status', v)} onCancel={() => setEditingField(null)} />
         )}
       </td>
       <td className="py-2 px-3"><EditableCell field="pc_contact" value={bill.pc_contact} /></td>

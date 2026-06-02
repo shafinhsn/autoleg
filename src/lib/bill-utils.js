@@ -41,7 +41,7 @@ export function detectSectionTag(value) {
 
 // CSV column auto-mapping (1-to-1 mapping for user's spreadsheets)
 export const COLUMN_MAP = {
-  "85": "priority_rank",
+  "85": "section_85",
   "number": "bill_number",
   "bill number": "bill_number",
   "bill no": "bill_number",

@@ -10,7 +10,6 @@ import SectionHeaderBar from '@/components/bills/SectionHeaderBar';
 import BillRow from '@/components/bills/BillRow.jsx';
 import { getSectionColor } from '@/lib/bill-utils';
 import { COLOR_MAP } from '@/pages/Customize';
-import { syncBill } from '@/lib/syncBill';
 import { Link } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
@@ -107,11 +106,12 @@ export default function Bills() {
     return true;
   });
 
+  const isFiltering = !!(search || filterStatus || filterCommittee || filterPriority);
+
   const sortedSections = [...sections].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-  const sectionedBills = sortedSections.map(s => ({
-    section: s,
-    bills: filtered.filter(b => b.section_header === s.name),
-  }));
+  const sectionedBills = sortedSections
+    .map(s => ({ section: s, bills: filtered.filter(b => b.section_header === s.name) }))
+    .filter(({ bills }) => !isFiltering || bills.length > 0);
   const unsectionedBills = filtered.filter(b => !b.section_header || !sections.find(s => s.name === b.section_header));
 
   const [addingBill, setAddingBill] = useState(false);
@@ -180,42 +180,19 @@ export default function Bills() {
   async function handleSync() {
     if (bills.length === 0) return;
     setSyncing(true);
-    setSyncProgress({ current: 0, total: bills.length, percent: 0 });
-    const apiKey = office?.senate_api_key || '5OuWFvXYcEmkPHLLaRPiHDHbVgnamYTL';
-    console.log('Starting sync with API key:', apiKey?.substring(0, 6) + '...');
-    let processed = 0;
-    let updatedCount = 0;
-    let errorCount = 0;
-    
-    // Process bills sequentially to avoid rate limits
-    for (const bill of bills) {
-      try {
-        console.log(`Syncing ${bill.bill_number}...`);
-        const updateData = await syncBill(bill, apiKey);
-        console.log(`${bill.bill_number} updateData:`, updateData);
-        if (updateData && Object.keys(updateData).length > 0) {
-          qc.setQueryData(['bills', office?.id], (old = []) =>
-            old.map(b => b.id === bill.id ? { ...b, ...updateData } : b)
-          );
-          await base44.entities.Bill.update(bill.id, updateData);
-          console.log(`${bill.bill_number} updated successfully`);
-          updatedCount++;
-        }
-      } catch (e) { 
-        console.error(`Sync error ${bill.bill_number}`, e); 
-        errorCount++;
-      }
-      processed++;
-      setSyncProgress({ current: processed, total: bills.length, percent: Math.round((processed / bills.length) * 100) });
-      // Wait 300ms between each bill to avoid rate limits
-      await new Promise(r => setTimeout(r, 300));
+    setSyncProgress({ current: 0, total: bills.length, percent: 50 });
+    try {
+      const response = await base44.functions.invoke('syncAllBills', { officeId: office.id });
+      const { updated = 0, errors = 0, total = 0 } = response.data;
+      await invalidateBills();
+      invalidateConfigs();
+      alert(`Sync complete: ${updated} bills updated, ${errors} errors out of ${total}`);
+    } catch (e) {
+      console.error('Sync error', e);
+      alert('Sync failed: ' + e.message);
     }
-    console.log(`Sync complete: ${updatedCount}/${bills.length} updated, ${errorCount} errors`);
-    await invalidateBills();
-    invalidateConfigs();
     setSyncing(false);
     setSyncProgress({ current: 0, total: 0, percent: 0 });
-    alert(`Sync complete: ${updatedCount} bills updated, ${errorCount} errors`);
   }
 
   function getSectionColorFromConfig(colorName) {
