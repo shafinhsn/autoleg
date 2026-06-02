@@ -70,7 +70,7 @@ function MultiSelectDropdown({ currentValues, options, onSave, onCancel }) {
   }
   
   return (
-    <div className="absolute z-50 bg-white border border-border rounded-lg shadow-xl -left-2 mt-1 min-w-[180px] max-w-[240px]">
+    <div className="absolute z-50 bg-white border border-border rounded-lg shadow-xl left-0 top-full mt-1 min-w-[180px] max-w-[240px]">
       <div className="max-h-48 overflow-y-auto p-1">
         {options.map(opt => (
           <button
