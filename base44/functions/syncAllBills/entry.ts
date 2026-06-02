@@ -2,6 +2,114 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 
 const DEFAULT_API_KEY = '5OuWFvXYcEmkPHLLaRPiHDHbVgnamYTL';
 
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Fetch Assembly bill data from NY Senate Open Legislation API.
+ * - Uses Assembly bill number to get: title, assembly committee, current status, assembly sponsor
+ * - Looks up Senate companion bill (sameAs) just to extract the senate sponsor name
+ * - Returns update payload or null if nothing found
+ */
+async function fetchBillFromAPI(bill, apiKey) {
+    const billNum = bill.bill_number?.trim().toUpperCase();
+    if (!billNum || !/^[AS]\d+[A-Z]?/.test(billNum)) {
+        throw new Error(`Invalid bill number: "${billNum}"`);
+    }
+
+    const key = apiKey || DEFAULT_API_KEY;
+
+    // Try session years 2025 then 2026 (2025-2026 session bills are keyed under 2025 in the API)
+    let result = null;
+    for (const year of [2025, 2026]) {
+        const url = `https://legislation.nysenate.gov/api/3/bills/${year}/${billNum}?key=${key}&view=with_refs`;
+        const resp = await fetch(url);
+        if (!resp.ok) continue;
+        const data = await resp.json();
+        if (data.success && data.result) {
+            result = data.result;
+            break;
+        }
+    }
+
+    if (!result) return null;
+
+    const updateData = {};
+
+    // Title — always overwrite from API
+    if (result.title) {
+        updateData.title = result.title;
+    }
+
+    // Assembly committee — from status.committeeName (this is the current active committee)
+    if (result.status?.committeeName) {
+        updateData.committee = [result.status.committeeName];
+    } else {
+        updateData.committee = [];
+    }
+
+    // Current status — use the clean statusDesc from the API
+    if (result.status?.statusDesc) {
+        updateData.latest_status = [result.status.statusDesc];
+    }
+
+    // Assembly sponsor — from the bill's own sponsor field
+    if (billNum.startsWith('A')) {
+        const m = result.sponsor?.member;
+        if (m) {
+            const name = m.fullName || `${m.firstName || ''} ${m.lastName || ''}`.trim() || m.shortName;
+            if (name) updateData.assembly_sponsor = name;
+        }
+    } else {
+        // Senate bill — sponsor goes to senate_sponsor
+        const m = result.sponsor?.member;
+        if (m) {
+            const name = m.fullName || `${m.firstName || ''} ${m.lastName || ''}`.trim() || m.shortName;
+            if (name) updateData.senate_sponsor = name;
+        }
+    }
+
+    // For Assembly bills: find Senate companion (sameAs) and grab ONLY their sponsor name
+    if (billNum.startsWith('A')) {
+        try {
+            const amendments = result.amendments?.items || {};
+            // Try latest amendment version first, then fall back to base version
+            const versionKeys = Object.keys(amendments).sort().reverse();
+            let senateBillNum = null;
+            let senateBillSession = null;
+
+            for (const vKey of versionKeys) {
+                const sameAsItems = amendments[vKey]?.sameAs?.items || [];
+                const companion = sameAsItems.find(x => (x.basePrintNo || x.printNo || '').startsWith('S'));
+                if (companion) {
+                    senateBillNum = companion.basePrintNo || companion.printNo;
+                    senateBillSession = companion.session || 2025;
+                    break;
+                }
+            }
+
+            if (senateBillNum) {
+                updateData.linked_senate_bill = senateBillNum;
+                const sUrl = `https://legislation.nysenate.gov/api/3/bills/${senateBillSession}/${senateBillNum}?key=${key}`;
+                const sResp = await fetch(sUrl);
+                if (sResp.ok) {
+                    const sData = await sResp.json();
+                    const sm = sData?.result?.sponsor?.member;
+                    if (sm) {
+                        const sname = sm.fullName || `${sm.firstName || ''} ${sm.lastName || ''}`.trim() || sm.shortName;
+                        if (sname) updateData.senate_sponsor = sname;
+                    }
+                }
+            }
+        } catch (e) {
+            console.error(`${billNum} senate companion lookup failed: ${e.message}`);
+        }
+    }
+
+    return Object.keys(updateData).length > 0 ? updateData : null;
+}
+
 Deno.serve(async (req) => {
     try {
         const base44 = createClientFromRequest(req);
@@ -10,7 +118,7 @@ Deno.serve(async (req) => {
         try {
             const body = await req.clone().json();
             officeId = body?.officeId || null;
-        } catch { /* scheduled call */ }
+        } catch { /* scheduled call — no body */ }
 
         let billsToSync = [];
 
@@ -34,37 +142,31 @@ Deno.serve(async (req) => {
         let errors = 0;
         let skipped = 0;
 
-        // Process ONE bill at a time to avoid Base44 rate limits
         for (const bill of billsToSync) {
             try {
                 const updateData = await fetchBillFromAPI(bill, bill._apiKey);
 
                 if (updateData) {
-                    // Wait before each SDK write to avoid rate limits
-                    await sleep(300);
+                    await sleep(300); // throttle SDK writes
                     await base44.asServiceRole.entities.Bill.update(bill.id, updateData);
-                    console.log(`✓ ${bill.bill_number}: title="${updateData.title || '(unchanged)'}", committee=${JSON.stringify(updateData.committee)}, status=${JSON.stringify(updateData.latest_status)}, sponsor="${updateData.assembly_sponsor || updateData.senate_sponsor || '(unchanged)'}"`);
+                    console.log(`✓ ${bill.bill_number}: status=${JSON.stringify(updateData.latest_status)}, committee=${JSON.stringify(updateData.committee)}, assembly_sponsor="${updateData.assembly_sponsor || ''}", senate_sponsor="${updateData.senate_sponsor || ''}"`);
                     updated++;
                 } else {
                     skipped++;
-                    console.log(`- ${bill.bill_number}: no data from API, skipped`);
+                    console.log(`- ${bill.bill_number}: not found in API, skipped`);
                 }
 
-                // Small delay between API fetches to respect Senate API rate limits
-                await sleep(150);
-
+                await sleep(200); // throttle Senate API requests
             } catch (err) {
                 errors++;
                 console.error(`✗ ${bill.bill_number}: ${err.message}`);
-                // On rate limit error, wait longer before continuing
                 if (err.message?.includes('Rate limit') || err.message?.includes('429')) {
-                    console.log('Rate limited — waiting 2s before continuing...');
-                    await sleep(2000);
+                    await sleep(3000);
                 }
             }
         }
 
-        console.log(`Sync complete: ${updated} updated, ${skipped} skipped (no API data), ${errors} errors out of ${billsToSync.length}`);
+        console.log(`Sync done: ${updated} updated, ${skipped} not found, ${errors} errors / ${billsToSync.length} total`);
         return Response.json({ success: true, updated, errors, skipped, total: billsToSync.length });
 
     } catch (error) {
@@ -72,92 +174,3 @@ Deno.serve(async (req) => {
         return Response.json({ error: error.message }, { status: 500 });
     }
 });
-
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function fetchBillFromAPI(bill, apiKey) {
-    const billNum = bill.bill_number?.trim().toUpperCase();
-    if (!billNum || !/^[AS]\d+/.test(billNum)) {
-        throw new Error(`Invalid bill number: "${billNum}"`);
-    }
-
-    // Try 2026 session first, fall back to 2025 (bills in 2025-2026 session are keyed under 2025)
-    const sessionsToTry = [2025, 2026];
-    let json = null;
-
-    for (const year of sessionsToTry) {
-        const url = `https://legislation.nysenate.gov/api/3/bills/${year}/${billNum}?key=${apiKey}&view=with_refs`;
-        const resp = await fetch(url);
-        if (!resp.ok) continue;
-        const data = await resp.json();
-        if (data.success && data.result) {
-            json = data;
-            break;
-        }
-    }
-
-    if (!json?.result) return null;
-
-    const result = json.result;
-    const updateData = {};
-
-    // Always overwrite title from API
-    if (result.title) {
-        updateData.title = result.title;
-    }
-
-    // Always overwrite committee from API
-    if (result.status?.committeeName) {
-        const c = result.status.committeeName;
-        updateData.committee = Array.isArray(c) ? c : [c];
-    } else {
-        updateData.committee = [];
-    }
-
-    // Always overwrite status from API
-    if (result.status?.statusDesc) {
-        const s = result.status.statusDesc;
-        updateData.latest_status = Array.isArray(s) ? s : [s];
-    }
-
-    // Always overwrite sponsor from API
-    const sponsorMember = result.sponsor?.member;
-    if (sponsorMember) {
-        const name = sponsorMember.fullName
-            || `${sponsorMember.firstName || ''} ${sponsorMember.lastName || ''}`.trim()
-            || sponsorMember.shortName;
-        if (name) {
-            if (billNum.startsWith('S')) {
-                updateData.senate_sponsor = name;
-            } else {
-                updateData.assembly_sponsor = name;
-            }
-        }
-    }
-
-    // Try to get senate companion bill sponsor if this is an assembly bill
-    if (billNum.startsWith('A')) {
-        try {
-            const sameAsItems = result.amendments?.items?.['']?.sameAs?.items
-                || result.amendments?.items?.['A']?.sameAs?.items
-                || [];
-            const senateBill = sameAsItems.find(x => x.basePrintNo?.startsWith('S'));
-            if (senateBill) {
-                const sUrl = `https://legislation.nysenate.gov/api/3/bills/${senateBill.session || 2025}/${senateBill.basePrintNo}?key=${apiKey}`;
-                const sResp = await fetch(sUrl);
-                if (sResp.ok) {
-                    const sData = await sResp.json();
-                    if (sData.success && sData.result?.sponsor?.member) {
-                        const sm = sData.result.sponsor.member;
-                        const sname = sm.fullName || `${sm.firstName || ''} ${sm.lastName || ''}`.trim();
-                        if (sname) updateData.senate_sponsor = sname;
-                    }
-                }
-            }
-        } catch { /* companion bill fetch is optional */ }
-    }
-
-    return Object.keys(updateData).length > 0 ? updateData : null;
-}
