@@ -4,8 +4,8 @@ Deno.serve(async (req) => {
     try {
         const base44 = createClientFromRequest(req);
         
-        // Use service role for scheduled automation (no user context)
         const offices = await base44.asServiceRole.entities.Office.list();
+        console.log(`Syncing bills for ${offices.length} offices`);
 
         for (const office of offices) {
             console.log(`Starting sync for office: ${office.name}`);
@@ -15,37 +15,32 @@ Deno.serve(async (req) => {
             for (const bill of bills) {
                 try {
                     const updateData = await syncBill(bill, apiKey);
-                    if (updateData) {
+                    if (updateData && Object.keys(updateData).length > 0) {
                         await base44.asServiceRole.entities.Bill.update(bill.id, updateData);
-                        console.log(`Updated bill ${bill.bill_number} for office ${office.name}`);
+                        console.log(`✓ Updated ${bill.bill_number}: sponsor, committee, status`);
                     }
                 } catch (e) {
-                    console.error(`Sync error for bill ${bill.bill_number} in office ${office.name}:`, e);
+                    console.error(`✗ Sync error for ${bill.bill_number}:`, e.message);
                 }
-                // Introduce a delay to respect API rate limits
+                
+                // Rate limit - 250ms between requests
                 await new Promise(resolve => setTimeout(resolve, 250));
             }
-            console.log(`Finished sync for office: ${office.name}`);
         }
 
-        return Response.json({ success: true, message: 'All bills sync completed successfully.' });
+        return Response.json({ success: true, message: 'Daily sync completed' });
     } catch (error) {
-        console.error('Error in syncAllBills function:', error);
+        console.error('Sync failed:', error);
         return Response.json({ error: error.message }, { status: 500 });
     }
 });
 
-/**
- * Fetches bill data from NY Senate Open Legislation API
- * and returns update data for changed fields.
- */
 async function syncBill(bill, apiKey) {
     const billNum = bill.bill_number?.trim().toUpperCase();
     if (!billNum) return null;
 
     const year = bill.session_year || 2026;
-    const key = apiKey || '5OuWFvXYcEmkPHLLaRPiHDHbVgnamYTL';
-    const url = `https://legislation.nysenate.gov/api/3/bills/${year}/${billNum}?key=${key}&view=with_refs`;
+    const url = `https://legislation.nysenate.gov/api/3/bills/${year}/${billNum}?key=${apiKey}&view=with_refs`;
 
     const resp = await fetch(url);
     if (!resp.ok) return null;
@@ -56,62 +51,37 @@ async function syncBill(bill, apiKey) {
 
     const updateData = {};
 
-    // Helper to ensure array of strings - FIXES the 422 validation error
-    const ensureArrayOfString = (value) => {
-        if (Array.isArray(value)) {
-            return value.filter(item => typeof item === 'string');
-        }
-        if (typeof value === 'string' && value.length > 0) {
-            return [value];
-        }
-        return [];
-    };
-
-    // Update key fields from API - always as arrays
-    updateData.title = result.title || bill.title || '';
-    updateData.latest_status = ensureArrayOfString(result.status?.statusDesc);
-    updateData.committee = ensureArrayOfString(result.status?.committeeName);
-
-    // Primary sponsor
+    // 1. SENATE SPONSOR - extract primary sponsor name
     const sponsorMember = result.sponsor?.member;
     if (sponsorMember) {
-        const name = sponsorMember.fullName
+        const sponsorName = sponsorMember.fullName
             || `${sponsorMember.firstName || ''} ${sponsorMember.lastName || ''}`.trim()
             || sponsorMember.shortName;
-        if (name) {
+        
+        if (sponsorName) {
             if (billNum.startsWith('S')) {
-                updateData.senate_sponsor = name;
+                updateData.senate_sponsor = sponsorName;
             } else {
-                updateData.assembly_sponsor = name;
+                updateData.assembly_sponsor = sponsorName;
             }
         }
     }
 
-    // Linked Senate companion bill
-    const amendments = result.amendments?.items || {};
-    const latestAmendmentKey = Object.keys(amendments).sort().pop();
-    const latestAmendment = latestAmendmentKey ? amendments[latestAmendmentKey] : null;
-
-    if (latestAmendment) {
-        const sameAsItems = latestAmendment.sameAs?.items || [];
-        if (sameAsItems.length > 0) {
-            const companion = sameAsItems[0];
-            const companionNum = companion.basePrintNo || companion.printNo;
-            if (companionNum) updateData.linked_senate_bill = companionNum;
-        }
+    // 2. CURRENT COMMITTEE - from bill status
+    if (result.status?.committeeName) {
+        const committeeStr = result.status.committeeName;
+        updateData.committee = Array.isArray(committeeStr) ? committeeStr : (committeeStr ? [committeeStr] : []);
     }
 
-    // Hearing date from actions
-    const actions = result.actions?.items || [];
-    for (let i = actions.length - 1; i >= 0; i--) {
-        const action = actions[i];
-        const text = (action.text || '').toUpperCase();
-        if (text.includes('HEARING') || text.includes('COMMITTEE') || text.includes('FLOOR')) {
-            if (action.date) {
-                updateData.hearing_date = action.date.split('T')[0];
-                break;
-            }
-        }
+    // 3. STATUS - from bill status description
+    if (result.status?.statusDesc) {
+        const statusStr = result.status.statusDesc;
+        updateData.latest_status = Array.isArray(statusStr) ? statusStr : (statusStr ? [statusStr] : []);
+    }
+
+    // Also update title if available
+    if (result.title) {
+        updateData.title = result.title;
     }
 
     return Object.keys(updateData).length > 0 ? updateData : null;
