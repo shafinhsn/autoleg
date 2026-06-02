@@ -121,6 +121,34 @@ async function fetchBillFromAPI(bill, apiKey) {
         updateData.committee = [];
     }
 
+    // If the bill was substituted, fetch the substitute bill's actions too for a better status
+    const substituteAction = (result.actions?.items || []).find(a => 
+        (a.text || '').toUpperCase().includes('SUBSTITUTED BY')
+    );
+    if (substituteAction) {
+        const subBillMatch = substituteAction.text.match(/SUBSTITUTED BY (\w+)/i);
+        if (subBillMatch) {
+            const subBillNum = subBillMatch[1];
+            try {
+                for (const year of [2025, 2026]) {
+                    const subUrl = `https://legislation.nysenate.gov/api/3/bills/${year}/${subBillNum}?key=${key}&view=with_refs`;
+                    const subResp = await fetch(subUrl);
+                    if (subResp.ok) {
+                        const subData = await subResp.json();
+                        if (subData.success && subData.result) {
+                            // Merge substitute bill's actions into result for status derivation
+                            const subActions = subData.result.actions?.items || [];
+                            result = { ...result, actions: { items: [...(result.actions?.items || []), ...subActions] } };
+                            break;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error(`Substitute bill ${subBillNum} lookup failed: ${e.message}`);
+            }
+        }
+    }
+
     // Current status — derive a meaningful label from status type + action history
     const statusLabel = deriveStatusLabel(result);
     if (statusLabel) {
