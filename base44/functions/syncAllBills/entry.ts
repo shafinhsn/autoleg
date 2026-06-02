@@ -56,10 +56,21 @@ async function syncBill(bill, apiKey) {
 
     const updateData = {};
 
-    // Update key fields from API
+    // Helper to ensure array of strings - FIXES the 422 validation error
+    const ensureArrayOfString = (value) => {
+        if (Array.isArray(value)) {
+            return value.filter(item => typeof item === 'string');
+        }
+        if (typeof value === 'string' && value.length > 0) {
+            return [value];
+        }
+        return [];
+    };
+
+    // Update key fields from API - always as arrays
     updateData.title = result.title || bill.title || '';
-    updateData.latest_status = result.status?.statusDesc ? [result.status.statusDesc] : [];
-    updateData.committee = result.status?.committeeName ? [result.status.committeeName] : [];
+    updateData.latest_status = ensureArrayOfString(result.status?.statusDesc);
+    updateData.committee = ensureArrayOfString(result.status?.committeeName);
 
     // Primary sponsor
     const sponsorMember = result.sponsor?.member;
