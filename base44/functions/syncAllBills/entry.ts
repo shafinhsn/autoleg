@@ -15,16 +15,21 @@ function deriveStatusLabel(result) {
     const statusDesc = result.status?.statusDesc || '';
     const actions = result.actions?.items || [];
 
-    // Check most recent actions first (reversed) for key legislative events
-    const recentActions = [...actions].reverse();
-    for (const action of recentActions) {
-        const text = (action.text || '').toUpperCase();
-        if (text.includes('SIGNED') || text.includes('CHAPTERED')) return 'Signed';
-        if (text.includes('VETOED') || text.includes('POCKET VETO')) return 'Vetoed';
-        if (text.includes('PASSED SENATE') && action.chamber === 'SENATE') return 'Passed Senate';
-        if (text.includes('PASSED ASSEMBLY') && action.chamber === 'ASSEMBLY') return 'Passed Assembly';
-        if (text.includes('SUBSTITUTED')) return 'Substituted';
-        if (text.includes('ADVANCED TO THIRD READING') || text.includes('THIRD READING')) return 'Advanced to Third Reading';
+    // Priority order: highest wins. Check ALL actions, pick the highest-priority match found.
+    const priorityOrder = [
+        { test: (t) => t.includes('SIGNED') || t.includes('CHAPTERED'), label: 'Signed' },
+        { test: (t) => t.includes('VETOED') || t.includes('POCKET VETO'), label: 'Vetoed' },
+        { test: (t) => t.includes('RETURNED TO SENATE'), label: 'Passed Assembly' },
+        { test: (t) => t.includes('PASSED ASSEMBLY'), label: 'Passed Assembly' },
+        { test: (t) => t.includes('PASSED SENATE'), label: 'Passed Senate' },
+        { test: (t) => t.includes('DELIVERED TO GOV'), label: 'Delivered to Governor' },
+        { test: (t) => t.includes('ORDERED TO THIRD READING') || t.includes('ADVANCED TO THIRD READING') || t.includes('THIRD READING CAL'), label: 'Ordered to Third Reading' },
+        { test: (t) => t.includes('SUBSTITUTED'), label: 'Substituted' },
+    ];
+
+    for (const priority of priorityOrder) {
+        const found = actions.find(a => priority.test((a.text || '').toUpperCase()));
+        if (found) return priority.label;
     }
 
     // Fall back to statusType mapping
