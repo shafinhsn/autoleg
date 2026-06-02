@@ -5,6 +5,7 @@ import {
   Sliders, ClipboardList, Settings
 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import NotificationBell from './NotificationBell';
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -64,10 +65,11 @@ export default function Sidebar() {
           <div className="w-7 h-7 rounded-full bg-sidebar-accent flex items-center justify-center text-xs font-semibold text-sidebar-accent-foreground flex-shrink-0">
             {user?.full_name?.charAt(0) || '?'}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-xs font-medium truncate">{user?.full_name}</p>
             <p className="text-[10px] text-sidebar-foreground/50 truncate capitalize">{user?.role || 'Staff'}</p>
           </div>
+          <NotificationBell userEmail={user?.email} officeId={office?.id} />
         </div>
         <button
           onClick={() => base44.auth.logout()}

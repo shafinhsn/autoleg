@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { Menu, X } from 'lucide-react';
+import { useOffice } from '@/hooks/useOffice';
+import NotificationBell from './NotificationBell';
 
 export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { office, user } = useOffice();
 
   return (
     <div className="min-h-screen bg-background">
@@ -14,6 +17,9 @@ export default function AppLayout() {
           {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
         <span className="ml-3 font-semibold text-sm">Assembly Bill Watch</span>
+        <div className="ml-auto">
+          <NotificationBell userEmail={user?.email} officeId={office?.id} />
+        </div>
       </div>
 
       {/* Mobile overlay */}

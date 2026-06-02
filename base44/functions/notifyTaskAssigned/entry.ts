@@ -5,12 +5,12 @@ Deno.serve(async (req) => {
         const base44 = createClientFromRequest(req);
         const { event, data } = await req.json();
 
-        // Only notify on create or when assigned_to changes on update
         if (!data?.assigned_to) return Response.json({ skipped: true });
 
         const task = data;
         const assigneeEmail = task.assigned_to;
 
+        // 1. Send email notification
         const subject = `New Task Assigned: ${task.title}`;
         const dueText = task.due_date ? `\nDue: ${task.due_date}` : '';
         const descText = task.description ? `\n\n${task.description}` : '';
@@ -22,7 +22,19 @@ Deno.serve(async (req) => {
             body,
         });
 
-        console.log(`Notification sent to ${assigneeEmail} for task: ${task.title}`);
+        // 2. Create in-app notification
+        const message = `You were assigned a new task: "${task.title}"${task.due_date ? ` (due ${task.due_date})` : ''}`;
+        await base44.asServiceRole.entities.Notification.create({
+            user_email: assigneeEmail,
+            office_id: task.office_id,
+            message,
+            type: 'task_assigned',
+            task_id: task.id || null,
+            link: '/tasks',
+            is_read: false,
+        });
+
+        console.log(`Notified ${assigneeEmail} for task: ${task.title}`);
         return Response.json({ success: true });
     } catch (error) {
         console.error('Notification error:', error);

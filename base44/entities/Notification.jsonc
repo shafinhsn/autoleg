@@ -1,0 +1,44 @@
+{
+  "name": "Notification",
+  "type": "object",
+  "properties": {
+    "user_email": {
+      "type": "string",
+      "description": "Email of the user this notification is for"
+    },
+    "office_id": {
+      "type": "string",
+      "description": "Office this notification belongs to"
+    },
+    "message": {
+      "type": "string",
+      "description": "Notification message text"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "task_assigned",
+        "task_updated",
+        "general"
+      ],
+      "default": "general"
+    },
+    "link": {
+      "type": "string",
+      "description": "Optional URL to navigate to"
+    },
+    "is_read": {
+      "type": "boolean",
+      "default": false
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Related task ID if applicable"
+    }
+  },
+  "required": [
+    "user_email",
+    "office_id",
+    "message"
+  ]
+}
