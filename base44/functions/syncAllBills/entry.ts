@@ -183,13 +183,34 @@ async function fetchBillFromAPI(bill, apiKey) {
             } else {
                 // Bill hasn't passed either chamber yet — use statusType + committee
                 if (statusType === 'IN_SENATE_COMM' || statusType === 'SENATE_FLOOR') {
-                    proceduralStatus = committeeName
-                        ? `In Senate ${committeeName} Committee`
-                        : (statusType === 'SENATE_FLOOR' ? 'Senate Floor Calendar' : 'In Senate Committee');
+                    if (statusType === 'SENATE_FLOOR') {
+                        const onThirdReading = reversedActions.some(a => {
+                            const t = (a.text || '').toUpperCase();
+                            return t.includes('THIRD READING') || t.includes('3RD READING') || t.includes('THIRD READ');
+                        });
+                        proceduralStatus = onThirdReading
+                            ? 'Senate Floor Calendar — Third Reading'
+                            : 'Senate Floor Calendar';
+                    } else {
+                        proceduralStatus = committeeName
+                            ? `In Senate ${committeeName} Committee`
+                            : 'In Senate Committee';
+                    }
                 } else if (statusType === 'IN_ASSEMBLY_COMM' || statusType === 'ASSEMBLY_FLOOR') {
-                    proceduralStatus = committeeName
-                        ? `In Assembly ${committeeName} Committee`
-                        : (statusType === 'ASSEMBLY_FLOOR' ? 'Assembly Floor Calendar' : 'In Assembly Committee');
+                    if (statusType === 'ASSEMBLY_FLOOR') {
+                        // Check if bill is on Third Reading in the action history
+                        const onThirdReading = reversedActions.some(a => {
+                            const t = (a.text || '').toUpperCase();
+                            return t.includes('THIRD READING') || t.includes('3RD READING') || t.includes('THIRD READ');
+                        });
+                        proceduralStatus = onThirdReading
+                            ? 'Assembly Floor Calendar — Third Reading'
+                            : 'Assembly Floor Calendar';
+                    } else {
+                        proceduralStatus = committeeName
+                            ? `In Assembly ${committeeName} Committee`
+                            : 'In Assembly Committee';
+                    }
                 } else {
                     proceduralStatus = PROCEDURAL_STATUS_MAP[statusType] || result.status?.statusDesc || null;
                 }
