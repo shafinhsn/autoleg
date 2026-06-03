@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useOffice } from '@/hooks/useOffice';
-import { DEFAULT_PRIORITY_TAGS, DEFAULT_STATUSES, DEFAULT_COMMITTEES } from '@/lib/tracker-defaults';
 import { Search, Plus, RefreshCw, Upload, Trash2, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +10,7 @@ import BillRow from '@/components/bills/BillRow.jsx';
 import { getSectionColor } from '@/lib/bill-utils';
 import { COLOR_MAP } from '@/pages/Customize';
 import { Link } from 'react-router-dom';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 export default function Bills() {
   const { office, isAdmin } = useOffice();
@@ -84,10 +84,18 @@ export default function Bills() {
   const committeeItems = committeeConfigs[0]?.items?.length ? committeeConfigs[0].items : [];
   const priorityItems = priorityConfigs[0]?.items?.length ? priorityConfigs[0].items : [];
 
-  const uniqueStatuses = statusItems.map(i => i.label);
-  const uniqueCommittees = committeeItems.map(i => i.label);
-  // Use priority tags from TrackerConfig for the filter dropdown (not section headers)
-  const uniquePriorities = priorityItems.map(i => i.label);
+  // Build filter options from ACTUAL bill data so filters always match what's visible
+  const uniqueStatuses = [...new Set(
+    bills.map(b => b.current_procedural_status || (Array.isArray(b.latest_status) ? b.latest_status[0] : b.latest_status) || '')
+         .filter(Boolean)
+  )].sort();
+  const uniqueCommittees = [...new Set(
+    bills.flatMap(b => Array.isArray(b.committee) ? b.committee : (b.committee ? [b.committee] : []))
+         .filter(Boolean)
+  )].sort();
+  const uniquePriorities = priorityItems.length
+    ? priorityItems.map(i => i.label)
+    : [...new Set(bills.flatMap(b => b.tags || []).filter(Boolean))].sort();
 
   const filtered = bills.filter(b => {
     if (search && !b.bill_number?.toLowerCase().includes(search.toLowerCase()) &&
@@ -269,11 +277,11 @@ export default function Bills() {
     qc.invalidateQueries({ queryKey: ['sections', office?.id] });
   }
 
-  async function handleMoveSection(index, direction) {
+  async function handleDragEnd(result) {
+    if (!result.destination || result.source.index === result.destination.index) return;
     const reordered = [...sortedSections];
-    const newIndex = index + direction;
-    if (newIndex < 0 || newIndex >= reordered.length) return;
-    [reordered[index], reordered[newIndex]] = [reordered[newIndex], reordered[index]];
+    const [moved] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, moved);
     const updated = reordered.map((s, i) => ({ ...s, sort_order: i }));
     qc.setQueryData(['sections', office?.id], updated);
     for (const s of updated) {
@@ -400,91 +408,108 @@ export default function Bills() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">No bills found. Add a bill or import a CSV.</div>
       ) : (
-        <div className="bg-card rounded-xl border overflow-hidden" style={{ height: 'calc(100vh - 220px)' }}>
-          <div className="overflow-auto h-full">
-            <table className="w-full text-left" style={{ minWidth: '1400px' }}>
-              <thead className="sticky top-0 z-10">
-                <tr className="border-b border-border text-[11px] text-muted-foreground uppercase tracking-wider bg-muted/95 backdrop-blur-sm">
-                  <th className="py-2 px-3 w-8">
-                    <input type="checkbox"
-                      checked={filtered.length > 0 && filtered.every(b => selectedBills.has(b.id))}
-                      onChange={() => toggleSelectAll(filtered)} className="rounded" />
-                  </th>
-                  <th className="py-2 px-3 font-medium">Bill No.</th>
-                  <th className="py-2 px-3 font-medium">Priority</th>
-                  <th className="py-2 px-3 font-medium">85</th>
-                  <th className="py-2 px-3 font-medium">Title</th>
-                  <th className="py-2 px-3 font-medium">Short Name</th>
-                  <th className="py-2 px-3 font-medium">Senate Sponsor</th>
-                  <th className="py-2 px-3 font-medium">Committee</th>
-                  <th className="py-2 px-3 font-medium">Status</th>
-                  <th className="py-2 px-3 font-medium">P&amp;C Contact</th>
-                  <th className="py-2 px-3 font-medium">Next Steps</th>
-                  <th className="py-2 px-3 font-medium">Session Comments</th>
-                  <th className="py-2 px-3 font-medium">Lobbyist</th>
-                  <th className="py-2 px-3 font-medium">Drive Link</th>
-                  <th className="py-2 px-3 font-medium">Caucus</th>
-                  <th className="py-2 px-3 w-10"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {sectionedBills.map(({ section, bills: sectionBills }, index) => (
-                  <React.Fragment key={section.id}>
-                    <tr>
-                      <td colSpan={16} className="p-0">
-                        <SectionHeaderBar
-                          section={section} billCount={sectionBills.length}
-                          expanded={expandedSections.has(section.id)}
-                          onToggle={() => toggleSection(section.id)}
-                          onUpdate={handleUpdateSection} onDelete={handleDeleteSection} isAdmin={isAdmin}
-                          onMoveUp={() => handleMoveSection(index, -1)}
-                          onMoveDown={() => handleMoveSection(index, 1)}
-                          isFirst={index === 0}
-                          isLast={index === sectionedBills.length - 1}
-                        />
-                      </td>
-                    </tr>
-                    {expandedSections.has(section.id) && sectionBills.length === 0 && (
-                      <tr>
-                        <td colSpan={16} className="text-sm text-muted-foreground py-4 px-4 text-center">No bills in this section</td>
-                      </tr>
-                    )}
-                    {expandedSections.has(section.id) && sectionBills.map(bill => (
-                      <BillRow
-                        key={bill.id} bill={bill}
-                        onUpdate={handleUpdateBill} onDelete={handleDeleteBill} isAdmin={isAdmin}
-                        selected={selectedBills.has(bill.id)}
-                        onToggleSelect={() => setSelectedBills(prev => { const n = new Set(prev); n.has(bill.id) ? n.delete(bill.id) : n.add(bill.id); return n; })}
-                        priorityItems={priorityItems} statusItems={statusItems}
-                        committeeItems={committeeItems} uniqueStatuses={uniqueStatuses} uniqueCommittees={uniqueCommittees}
-                      />
-                    ))}
-                  </React.Fragment>
-                ))}
-                {unsectionedBills.length > 0 && (
-                  <>
-                    <tr>
-                      <td colSpan={16} className="px-4 py-2 bg-muted/30 border-y border-border">
-                        <span className="font-semibold text-sm">Uncategorized</span>
-                        <span className="ml-2 text-xs text-muted-foreground">{unsectionedBills.length} bills</span>
-                      </td>
-                    </tr>
-                    {unsectionedBills.map(bill => (
-                      <BillRow
-                        key={bill.id} bill={bill}
-                        onUpdate={handleUpdateBill} onDelete={handleDeleteBill} isAdmin={isAdmin}
-                        selected={selectedBills.has(bill.id)}
-                        onToggleSelect={() => setSelectedBills(prev => { const n = new Set(prev); n.has(bill.id) ? n.delete(bill.id) : n.add(bill.id); return n; })}
-                        priorityItems={priorityItems} statusItems={statusItems}
-                        committeeItems={committeeItems} uniqueStatuses={uniqueStatuses} uniqueCommittees={uniqueCommittees}
-                      />
-                    ))}
-                  </>
-                )}
-              </tbody>
-            </table>
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <div className="bg-card rounded-xl border overflow-hidden" style={{ height: 'calc(100vh - 220px)' }}>
+            <div className="overflow-auto h-full">
+              <table className="w-full text-left" style={{ minWidth: '1400px', borderCollapse: 'collapse' }}>
+                <thead className="sticky top-0 z-10">
+                  <tr className="border-b border-border text-[11px] text-muted-foreground uppercase tracking-wider bg-muted/95 backdrop-blur-sm">
+                    <th className="py-2 px-3 w-8">
+                      <input type="checkbox"
+                        checked={filtered.length > 0 && filtered.every(b => selectedBills.has(b.id))}
+                        onChange={() => toggleSelectAll(filtered)} className="rounded" />
+                    </th>
+                    <th className="py-2 px-3 font-medium">Bill No.</th>
+                    <th className="py-2 px-3 font-medium">Priority</th>
+                    <th className="py-2 px-3 font-medium">85</th>
+                    <th className="py-2 px-3 font-medium">Title</th>
+                    <th className="py-2 px-3 font-medium">Short Name</th>
+                    <th className="py-2 px-3 font-medium">Senate Sponsor</th>
+                    <th className="py-2 px-3 font-medium">Committee</th>
+                    <th className="py-2 px-3 font-medium">Status</th>
+                    <th className="py-2 px-3 font-medium">P&amp;C Contact</th>
+                    <th className="py-2 px-3 font-medium">Next Steps</th>
+                    <th className="py-2 px-3 font-medium">Session Comments</th>
+                    <th className="py-2 px-3 font-medium">Lobbyist</th>
+                    <th className="py-2 px-3 font-medium">Drive Link</th>
+                    <th className="py-2 px-3 font-medium">Caucus</th>
+                    <th className="py-2 px-3 w-10"></th>
+                  </tr>
+                </thead>
+                <Droppable droppableId="sections" type="section">
+                  {(provided) => (
+                    <tbody ref={provided.innerRef} {...provided.droppableProps}>
+                      {sectionedBills.map(({ section, bills: sectionBills }, index) => (
+                        <Draggable
+                          key={section.id}
+                          draggableId={section.id}
+                          index={index}
+                          isDragDisabled={!isAdmin}
+                        >
+                          {(drag, snapshot) => (
+                            <>
+                              <tr ref={drag.innerRef} {...drag.draggableProps} style={drag.draggableProps.style}>
+                                <td colSpan={16} className="p-0">
+                                  <SectionHeaderBar
+                                    section={section}
+                                    billCount={sectionBills.length}
+                                    expanded={expandedSections.has(section.id)}
+                                    onToggle={() => toggleSection(section.id)}
+                                    onUpdate={handleUpdateSection}
+                                    onDelete={handleDeleteSection}
+                                    isAdmin={isAdmin}
+                                    dragHandleProps={drag.dragHandleProps}
+                                    isDragging={snapshot.isDragging}
+                                  />
+                                </td>
+                              </tr>
+                              {expandedSections.has(section.id) && sectionBills.length === 0 && (
+                                <tr>
+                                  <td colSpan={16} className="text-sm text-muted-foreground py-4 px-4 text-center">No bills in this section</td>
+                                </tr>
+                              )}
+                              {expandedSections.has(section.id) && sectionBills.map(bill => (
+                                <BillRow
+                                  key={bill.id} bill={bill}
+                                  onUpdate={handleUpdateBill} onDelete={handleDeleteBill} isAdmin={isAdmin}
+                                  selected={selectedBills.has(bill.id)}
+                                  onToggleSelect={() => setSelectedBills(prev => { const n = new Set(prev); n.has(bill.id) ? n.delete(bill.id) : n.add(bill.id); return n; })}
+                                  priorityItems={priorityItems} statusItems={statusItems}
+                                  committeeItems={committeeItems} uniqueStatuses={uniqueStatuses} uniqueCommittees={uniqueCommittees}
+                                />
+                              ))}
+                            </>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                      {unsectionedBills.length > 0 && (
+                        <>
+                          <tr>
+                            <td colSpan={16} className="px-4 py-2 bg-muted/30 border-y border-border">
+                              <span className="font-semibold text-sm">Uncategorized</span>
+                              <span className="ml-2 text-xs text-muted-foreground">{unsectionedBills.length} bills</span>
+                            </td>
+                          </tr>
+                          {unsectionedBills.map(bill => (
+                            <BillRow
+                              key={bill.id} bill={bill}
+                              onUpdate={handleUpdateBill} onDelete={handleDeleteBill} isAdmin={isAdmin}
+                              selected={selectedBills.has(bill.id)}
+                              onToggleSelect={() => setSelectedBills(prev => { const n = new Set(prev); n.has(bill.id) ? n.delete(bill.id) : n.add(bill.id); return n; })}
+                              priorityItems={priorityItems} statusItems={statusItems}
+                              committeeItems={committeeItems} uniqueStatuses={uniqueStatuses} uniqueCommittees={uniqueCommittees}
+                            />
+                          ))}
+                        </>
+                      )}
+                    </tbody>
+                  )}
+                </Droppable>
+              </table>
+            </div>
           </div>
-        </div>
+        </DragDropContext>
       )}
 
       {filtered.length > 0 && (
