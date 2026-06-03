@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useOffice } from '@/hooks/useOffice';
-import { Plus, Trash2, FileText, AlertTriangle, Clock, ExternalLink, Search } from 'lucide-react';
+import { Plus, Trash2, FileText, AlertTriangle, Clock, ExternalLink, Search, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -18,12 +18,6 @@ const URGENCY_CONFIG = {
   urgent: { label: 'Urgent', color: 'bg-red-100 text-red-700', icon: AlertTriangle },
 };
 
-const STATUS_CONFIG = {
-  pending: { label: 'Pending', color: 'bg-slate-100 text-slate-600' },
-  in_progress: { label: 'In Progress', color: 'bg-blue-100 text-blue-700' },
-  completed: { label: 'Completed', color: 'bg-green-100 text-green-700' },
-};
-
 export default function Assignments() {
   const { office, user, isAdmin } = useOffice();
   const qc = useQueryClient();
@@ -31,7 +25,7 @@ export default function Assignments() {
   const [search, setSearch] = useState('');
   const [billSearch, setBillSearch] = useState('');
   const [showBillResults, setShowBillResults] = useState(false);
-  const billSearchRef = useState(null);
+  const [activeTab, setActiveTab] = useState('active'); // 'active' | 'completed'
   const [form, setForm] = useState({
     title: '', description: '', assigned_to: '', due_date: '',
     urgency: 'medium', bill_id: '',
@@ -60,6 +54,9 @@ export default function Assignments() {
     ? assignments
     : assignments.filter(a => a.assigned_to === user?.email);
 
+  const activeAssignments = myAssignments.filter(a => a.status !== 'completed');
+  const completedAssignments = myAssignments.filter(a => a.status === 'completed');
+
   async function handleCreate() {
     if (!form.title.trim()) return;
     await base44.entities.Task.create({
@@ -75,10 +72,18 @@ export default function Assignments() {
     toast({ title: 'Assignment created' });
   }
 
+  async function handleMarkComplete(task) {
+    await base44.entities.Task.update(task.id, { status: 'completed' });
+    qc.invalidateQueries({ queryKey: ['assignments'] });
+    toast({ title: 'Assignment marked as complete' });
+    // For admins, switch to completed tab so they can see it
+    if (isAdmin) setActiveTab('completed');
+  }
+
   async function handleStatusChange(task, newStatus) {
     await base44.entities.Task.update(task.id, { status: newStatus });
     qc.invalidateQueries({ queryKey: ['assignments'] });
-    toast({ title: `Marked as ${STATUS_CONFIG[newStatus]?.label}` });
+    toast({ title: `Status updated` });
   }
 
   async function handleDelete(id) {
@@ -96,20 +101,113 @@ export default function Assignments() {
   }, []);
 
   const urgencyOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
-  const sorted = [...myAssignments]
-    .sort((a, b) => (urgencyOrder[a.urgency] ?? 2) - (urgencyOrder[b.urgency] ?? 2))
-    .filter(a => {
-      if (!search.trim()) return true;
-      const q = search.toLowerCase();
-      const linkedBill = bills.find(b => b.id === a.bill_id);
-      return (
-        a.title?.toLowerCase().includes(q) ||
-        a.description?.toLowerCase().includes(q) ||
-        a.assigned_to?.toLowerCase().includes(q) ||
-        linkedBill?.bill_number?.toLowerCase().includes(q) ||
-        linkedBill?.short_name?.toLowerCase().includes(q)
-      );
-    });
+
+  function filterAndSort(list) {
+    return [...list]
+      .sort((a, b) => (urgencyOrder[a.urgency] ?? 2) - (urgencyOrder[b.urgency] ?? 2))
+      .filter(a => {
+        if (!search.trim()) return true;
+        const q = search.toLowerCase();
+        const linkedBill = bills.find(b => b.id === a.bill_id);
+        return (
+          a.title?.toLowerCase().includes(q) ||
+          a.description?.toLowerCase().includes(q) ||
+          a.assigned_to?.toLowerCase().includes(q) ||
+          linkedBill?.bill_number?.toLowerCase().includes(q) ||
+          linkedBill?.short_name?.toLowerCase().includes(q)
+        );
+      });
+  }
+
+  const displayList = filterAndSort(activeTab === 'active' ? activeAssignments : completedAssignments);
+
+  function AssignmentCard({ task, isCompleted }) {
+    const urgency = URGENCY_CONFIG[task.urgency || task.priority] || URGENCY_CONFIG.medium;
+    const UrgencyIcon = urgency.icon;
+    const linkedBill = bills.find(b => b.id === task.bill_id);
+
+    return (
+      <Card className={`border-l-4 ${
+        isCompleted ? 'border-l-green-400 opacity-80' :
+        (task.urgency === 'urgent' || task.urgency === 'high') ? 'border-l-red-500' :
+        task.urgency === 'medium' ? 'border-l-amber-400' : 'border-l-slate-300'
+      }`}>
+        <CardContent className="p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className={`font-semibold text-sm ${isCompleted ? 'line-through text-muted-foreground' : ''}`}>
+                  {task.title}
+                </span>
+                <Badge className={`text-[10px] ${urgency.color}`}>
+                  <UrgencyIcon className="w-3 h-3 mr-1" />{urgency.label}
+                </Badge>
+                {isCompleted && (
+                  <Badge className="text-[10px] bg-green-100 text-green-700">✓ Completed</Badge>
+                )}
+              </div>
+
+              {task.description && (
+                <p className="text-sm text-muted-foreground mt-1 whitespace-pre-line">{task.description}</p>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-muted-foreground">
+                {task.assigned_to && (
+                  <span>→ <strong>{staff.find(s => s.email === task.assigned_to)?.full_name || task.assigned_to}</strong></span>
+                )}
+                {task.due_date && <span>📅 Due: <strong>{task.due_date}</strong></span>}
+                {linkedBill && (
+                  <span className="flex items-center gap-1">
+                    📋 <strong>{linkedBill.bill_number}</strong>
+                  </span>
+                )}
+                {linkedBill?.google_drive_url && (
+                  <a
+                    href={linkedBill.google_drive_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-white bg-primary px-2 py-1 rounded hover:bg-primary/80 transition-colors"
+                  >
+                    <ExternalLink className="w-3 h-3" /> Upload to Drive
+                  </a>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {!isCompleted && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-green-700 border-green-300 hover:bg-green-50 text-xs h-8"
+                  onClick={() => handleMarkComplete(task)}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Complete
+                </Button>
+              )}
+
+              {/* Admins: restore to active or delete */}
+              {isAdmin && isCompleted && (
+                <button
+                  onClick={() => handleStatusChange(task, 'pending')}
+                  className="text-xs text-muted-foreground hover:text-foreground border rounded px-2 py-1 hover:bg-muted/50 transition-colors"
+                >
+                  Reopen
+                </button>
+              )}
+
+              {isAdmin && (
+                <button onClick={() => handleDelete(task.id)}
+                  className="p-1.5 text-muted-foreground hover:text-destructive rounded transition-colors">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -136,6 +234,40 @@ export default function Assignments() {
             </Button>
           )}
         </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 border-b">
+        <button
+          onClick={() => setActiveTab('active')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'active'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Active
+          {activeAssignments.length > 0 && (
+            <span className="ml-2 bg-primary/10 text-primary text-[10px] font-semibold px-1.5 py-0.5 rounded-full">
+              {activeAssignments.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('completed')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'completed'
+              ? 'border-green-600 text-green-700'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Completed
+          {completedAssignments.length > 0 && (
+            <span className="ml-2 bg-green-100 text-green-700 text-[10px] font-semibold px-1.5 py-0.5 rounded-full">
+              {completedAssignments.length}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Create Form - Admins/Directors only */}
@@ -241,84 +373,20 @@ export default function Assignments() {
         <div className="flex items-center justify-center py-20">
           <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" />
         </div>
-      ) : sorted.length === 0 ? (
+      ) : displayList.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground">
           <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p>{isAdmin ? 'No assignments yet. Create one above.' : 'No assignments for you yet.'}</p>
+          <p>
+            {activeTab === 'active'
+              ? (isAdmin ? 'No active assignments.' : 'No active assignments for you.')
+              : 'No completed assignments yet.'}
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {sorted.map(task => {
-            const urgency = URGENCY_CONFIG[task.urgency || task.priority] || URGENCY_CONFIG.medium;
-            const status = STATUS_CONFIG[task.status] || STATUS_CONFIG.pending;
-            const UrgencyIcon = urgency.icon;
-            const linkedBill = bills.find(b => b.id === task.bill_id);
-
-            return (
-              <Card key={task.id} className={`border-l-4 ${
-                (task.urgency === 'urgent' || task.urgency === 'high') ? 'border-l-red-500' :
-                task.urgency === 'medium' ? 'border-l-amber-400' : 'border-l-slate-300'
-              }`}>
-                <CardContent className="p-5">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="font-semibold text-sm">{task.title}</span>
-                        <Badge className={`text-[10px] ${urgency.color}`}>
-                          <UrgencyIcon className="w-3 h-3 mr-1" />{urgency.label}
-                        </Badge>
-                        <Badge className={`text-[10px] ${status.color}`}>{status.label}</Badge>
-                      </div>
-
-                      {task.description && (
-                        <p className="text-sm text-muted-foreground mt-1 whitespace-pre-line">{task.description}</p>
-                      )}
-
-                      <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-muted-foreground">
-                        {task.assigned_to && (
-                          <span>→ <strong>{staff.find(s => s.email === task.assigned_to)?.full_name || task.assigned_to}</strong></span>
-                        )}
-                        {task.due_date && <span>📅 Due: <strong>{task.due_date}</strong></span>}
-                        {linkedBill && (
-                          <span className="flex items-center gap-1">
-                            📋 <strong>{linkedBill.bill_number}</strong>
-                          </span>
-                        )}
-                        {linkedBill?.google_drive_url && (
-                          <a
-                            href={linkedBill.google_drive_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs font-medium text-white bg-primary px-2 py-1 rounded hover:bg-primary/80 transition-colors"
-                          >
-                            <ExternalLink className="w-3 h-3" /> Upload to Drive
-                          </a>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {/* Status change */}
-                      <select value={task.status}
-                        onChange={e => handleStatusChange(task, e.target.value)}
-                        className="text-xs border rounded px-1.5 py-1 bg-background">
-                        <option value="pending">Pending</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="completed">Completed</option>
-                      </select>
-
-                      {isAdmin && (
-                        <button onClick={() => handleDelete(task.id)}
-                          className="p-1.5 text-muted-foreground hover:text-destructive rounded transition-colors">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+          {displayList.map(task => (
+            <AssignmentCard key={task.id} task={task} isCompleted={activeTab === 'completed'} />
+          ))}
         </div>
       )}
     </div>
