@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useOffice } from '@/hooks/useOffice';
-import { Plus, Trash2, Upload, FileText, AlertTriangle, Clock, CheckCircle2, ExternalLink, Search } from 'lucide-react';
+import { Plus, Trash2, FileText, AlertTriangle, Clock, ExternalLink, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -28,7 +28,6 @@ export default function Assignments() {
   const { office, user, isAdmin } = useOffice();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
-  const [uploadingFor, setUploadingFor] = useState(null);
   const [search, setSearch] = useState('');
   const [billSearch, setBillSearch] = useState('');
   const [showBillResults, setShowBillResults] = useState(false);
@@ -87,26 +86,6 @@ export default function Assignments() {
     await base44.entities.Task.delete(id);
     qc.invalidateQueries({ queryKey: ['assignments'] });
     toast({ title: 'Assignment deleted' });
-  }
-
-  async function handleDocUpload(e, task) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadingFor(task.id);
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
-    // If linked bill has a google drive URL, note it. Otherwise store doc link.
-    const linkedBill = bills.find(b => b.id === task.bill_id);
-    const notes = task.internal_notes || '';
-    const newNote = `\n📎 [${file.name}](${file_url}) — uploaded ${new Date().toLocaleDateString()}`;
-    await base44.entities.Task.update(task.id, { description: (task.description || '') + newNote });
-    qc.invalidateQueries({ queryKey: ['assignments'] });
-    setUploadingFor(null);
-    toast({
-      title: 'Document uploaded',
-      description: linkedBill?.google_drive_url
-        ? 'Also upload to the linked Google Drive folder manually.'
-        : 'File link saved to assignment.',
-    });
   }
 
   // Close bill search dropdown on outside click
@@ -315,20 +294,6 @@ export default function Assignments() {
                     </div>
 
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      {/* Doc upload for staffer */}
-                      <label className="cursor-pointer">
-                        <input type="file" accept=".pdf,.doc,.docx,image/*" className="hidden"
-                          onChange={e => handleDocUpload(e, task)} />
-                        <span className="inline-flex items-center gap-1 text-xs text-primary border border-primary/30 rounded px-2 py-1 hover:bg-primary/5 transition-colors">
-                          {uploadingFor === task.id ? (
-                            <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <Upload className="w-3 h-3" />
-                          )}
-                          Upload Doc
-                        </span>
-                      </label>
-
                       {/* Status change */}
                       <select value={task.status}
                         onChange={e => handleStatusChange(task, e.target.value)}
