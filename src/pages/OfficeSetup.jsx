@@ -305,10 +305,23 @@ export default function OfficeSetup() {
                   <UserPlus className="w-6 h-6 text-accent" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold">Join an Existing Office</h3>
+                  <h3 className="text-lg font-semibold">Join with Invite Code</h3>
                   <p className="text-sm text-muted-foreground">Enter your invite code from your office administrator</p>
                 </div>
                 <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-accent transition-colors" />
+              </div>
+            </button>
+
+            <button onClick={autoFixAndLoadOffices} className="w-full p-6 rounded-xl border-2 border-border bg-card hover:border-primary/50 transition-all text-left group">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-muted/10 flex items-center justify-center group-hover:bg-muted/20 transition-colors">
+                  <Building2 className="w-6 h-6 text-muted-foreground" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold">View My Offices</h3>
+                  <p className="text-sm text-muted-foreground">See offices you're already a member of</p>
+                </div>
+                <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
               </div>
             </button>
           </div>
