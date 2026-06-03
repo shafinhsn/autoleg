@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/select';
 
 export default function Settings() {
-  const { office, isOwner, isAdmin, user, refetchOffice } = useOffice();
+  const { office, isOwner, isAdmin, user, refetchOffice, membershipRole } = useOffice();
   const qc = useQueryClient();
   const [form, setForm] = useState({
     name: '',
@@ -58,6 +58,18 @@ export default function Settings() {
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  }
+
+  async function handleFixMyRole() {
+    if (!confirm('This will set your role to OWNER for this office. Continue?')) return;
+    const myMembership = memberships.find(m => m.user_id === user.id);
+    if (myMembership) {
+      await base44.entities.Membership.update(myMembership.id, { role: 'OWNER' });
+    } else {
+      await base44.entities.Membership.create({ user_id: user.id, office_id: office.id, role: 'OWNER' });
+    }
+    alert('Your role has been updated to OWNER. Please refresh the page.');
+    window.location.reload();
   }
 
   async function handleLeaveOffice() {
@@ -187,8 +199,19 @@ export default function Settings() {
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Settings</h1>
         <Card>
-          <CardContent className="py-16 text-center space-y-4">
-            <p className="text-muted-foreground">Only Owners, Admins can manage settings.</p>
+          <CardContent className="py-8 text-center space-y-4">
+            <p className="text-muted-foreground">Only Owners and Admins can manage settings.</p>
+            <p className="text-sm text-muted-foreground">Your current role: <strong>{membershipRole || 'Unknown'}</strong></p>
+            {office?.creator_id === user?.id && (
+              <div className="mt-4">
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-3 mb-3">
+                  You created this office but your role is set to {membershipRole}. Click below to fix it.
+                </p>
+                <Button onClick={handleFixMyRole} variant="outline">
+                  Fix My Role (Set to Owner)
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>
