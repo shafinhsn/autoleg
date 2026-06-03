@@ -150,26 +150,5 @@
   "required": [
     "bill_number",
     "office_id"
-  ],
-  "rls": {
-    "create": true,
-    "read": {
-      "data.office_id": "{{user.active_office_id}}"
-    },
-    "update": {
-      "data.office_id": "{{user.active_office_id}}"
-    },
-    "delete": {
-      "$or": [
-        {
-          "data.office_id": "{{user.active_office_id}}"
-        },
-        {
-          "user_condition": {
-            "role": "admin"
-          }
-        }
-      ]
-    }
-  }
+  ]
 }

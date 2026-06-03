@@ -40,28 +40,5 @@
     "user_email",
     "office_id",
     "message"
-  ],
-  "rls": {
-    "create": {
-      "$or": [
-        {
-          "data.user_email": "{{user.email}}"
-        },
-        {
-          "user_condition": {
-            "role": "admin"
-          }
-        }
-      ]
-    },
-    "read": {
-      "data.user_email": "{{user.email}}"
-    },
-    "update": {
-      "data.user_email": "{{user.email}}"
-    },
-    "delete": {
-      "data.user_email": "{{user.email}}"
-    }
-  }
+  ]
 }
