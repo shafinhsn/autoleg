@@ -2,107 +2,94 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useOffice } from '@/hooks/useOffice';
-import { Users, Crown, UserCheck, GraduationCap, Shield, Trash2, Copy, Mail } from 'lucide-react';
+import { Users, Crown, UserCheck, GraduationCap, Shield, Trash2, Copy, Mail, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/use-toast';
 
-const ROLES = [
-  { value: 'admin', label: 'Admin', icon: Shield, color: 'text-red-600 bg-red-50' },
-  { value: 'legislative_director', label: 'Legislative Director', icon: Crown, color: 'text-amber-600 bg-amber-50' },
-  { value: 'staffer', label: 'General Staffer', icon: UserCheck, color: 'text-blue-600 bg-blue-50' },
-  { value: 'intern', label: 'Intern', icon: GraduationCap, color: 'text-emerald-600 bg-emerald-50' },
-  { value: 'user', label: 'Unassigned (New)', icon: UserCheck, color: 'text-gray-600 bg-gray-50' },
+const MEMBERSHIP_ROLES = [
+  { value: 'OWNER', label: 'Owner', icon: Crown, color: 'text-amber-600 bg-amber-50' },
+  { value: 'ADMIN', label: 'Admin', icon: Shield, color: 'text-red-600 bg-red-50' },
+  { value: 'STAFF', label: 'Staff', icon: UserCheck, color: 'text-blue-600 bg-blue-50' },
+  { value: 'READ_ONLY', label: 'Viewer', icon: GraduationCap, color: 'text-emerald-600 bg-emerald-50' },
 ];
 
 function roleInfo(role) {
-  return ROLES.find(r => r.value === role) || ROLES.find(r => r.value === 'user');
+  return MEMBERSHIP_ROLES.find(r => r.value === role) || MEMBERSHIP_ROLES[3];
 }
 
 export default function StaffDirectory() {
   const { office, isAdmin, user } = useOffice();
   const qc = useQueryClient();
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('staffer');
+  const [inviteRole, setInviteRole] = useState('STAFF');
   const [inviting, setInviting] = useState(false);
 
-  const { data: staff = [], isLoading } = useQuery({
-    queryKey: ['staff', office?.id],
-    queryFn: () => base44.entities.User.filter({ office_id: office?.id }),
+  // Fetch all memberships for this office
+  const { data: memberships = [], isLoading: loadingMemberships, refetch: refetchMemberships } = useQuery({
+    queryKey: ['memberships', office?.id],
+    queryFn: () => base44.entities.Membership.filter({ office_id: office?.id }),
     enabled: !!office?.id,
   });
 
-  // Get all users to find pending invites (invited but not yet joined)
-  const { data: allUsers = [] } = useQuery({
-    queryKey: ['all-users'],
-    queryFn: () => base44.entities.User.list(),
-    enabled: isAdmin,
+  // Fetch all users referenced by memberships
+  const userIds = memberships.map(m => m.user_id);
+  const { data: allUsers = [], isLoading: loadingUsers } = useQuery({
+    queryKey: ['membership-users', userIds.join(',')],
+    queryFn: async () => {
+      if (userIds.length === 0) return [];
+      const results = await Promise.all(
+        userIds.map(id => base44.entities.User.filter({ id }).then(r => r[0]).catch(() => null))
+      );
+      return results.filter(Boolean);
+    },
+    enabled: userIds.length > 0,
   });
 
-  // Show pending invites (users without office_id but with is_active=false)
-  const pendingInvites = isAdmin ? allUsers.filter(u => !u.office_id && u.is_active === false && u.email) : [];
+  const isLoading = loadingMemberships || (userIds.length > 0 && loadingUsers);
+
+  // Build enriched staff list: membership + user info merged
+  const staff = memberships.map(mem => {
+    const userRecord = allUsers.find(u => u.id === mem.user_id);
+    return {
+      ...userRecord,
+      membershipId: mem.id,
+      membershipRole: mem.role,
+      userId: mem.user_id,
+    };
+  }).filter(s => s.userId);
 
   async function handleRoleChange(member, newRole) {
-    await base44.entities.User.update(member.id, { role: newRole });
-    qc.invalidateQueries({ queryKey: ['staff'] });
-    toast({ title: `Updated ${member.full_name}'s role` });
+    await base44.entities.Membership.update(member.membershipId, { role: newRole });
+    qc.invalidateQueries({ queryKey: ['memberships', office?.id] });
+    toast({ title: `Updated ${member.full_name || member.email}'s role to ${newRole}` });
   }
 
   async function handleRemove(member) {
-    if (!confirm(`Remove ${member.full_name || member.email} from this office? They will no longer have access.`)) return;
-    await base44.entities.User.update(member.id, { office_id: '', is_active: false });
-    qc.invalidateQueries({ queryKey: ['staff'] });
-    qc.invalidateQueries({ queryKey: ['all-users'] });
+    if (!confirm(`Remove ${member.full_name || member.email} from this office?`)) return;
+    await base44.entities.Membership.delete(member.membershipId);
+    qc.invalidateQueries({ queryKey: ['memberships', office?.id] });
     toast({ title: `Removed ${member.full_name || member.email}` });
-  }
-
-  async function handleCancelInvite(invite) {
-    if (!confirm(`Cancel invite for ${invite.email}?`)) return;
-    await base44.entities.User.delete(invite.id);
-    qc.invalidateQueries({ queryKey: ['all-users'] });
-    toast({ title: 'Invite cancelled' });
   }
 
   async function handleInvite() {
     if (!inviteEmail.trim()) return;
     setInviting(true);
     try {
-      // Check if user already exists
-      const existingUsers = await base44.entities.User.filter({ email: inviteEmail.trim() });
-      if (existingUsers.length > 0 && existingUsers[0].office_id) {
-        toast({ title: 'User already in office', description: `${inviteEmail} is already a member.`, variant: 'destructive' });
-        setInviting(false);
-        return;
-      }
-      
-      // Invite the user to the platform (sends login email)
+      // Send platform invite
       await base44.users.inviteUser(inviteEmail.trim(), 'user');
-      
-      // If user record doesn't exist, create a pending invite record
-      if (existingUsers.length === 0) {
-        await base44.entities.User.create({
-          email: inviteEmail.trim(),
-          role: 'user',
-          is_active: false,
-          office_id: null,
-        });
-      }
-      
-      // Also send them the office invite code so they know how to join
-      await base44.integrations.Core.SendEmail({
-        to: inviteEmail.trim(),
-        subject: `You've been invited to join ${office?.name}`,
-        body: `Hi,\n\nYou've been invited to join ${office?.name} on Assembly Bill Watch.\n\n` +
-          `Step 1: Log in at the link sent to you by the platform.\n` +
-          `Step 2: When prompted, select "Join an Existing Office" and enter this invite code:\n\n` +
-          `  ${office?.invite_code}\n\n` +
-          `You'll then have access to the office's bill tracker and team tools.\n\n` +
-          `Questions? Reply to this email or contact your office administrator.`,
+
+      // Send email with office invite code
+      await base44.functions.invoke('sendOfficeInviteEmail', {
+        email: inviteEmail.trim(),
+        officeName: office?.name,
+        inviteCode: office?.invite_code,
+        appUrl: window.location.origin,
       });
-      toast({ title: `Invited ${inviteEmail}`, description: 'Login link + office code sent.' });
+
+      toast({ title: `Invited ${inviteEmail}`, description: 'Login link and office invite code sent.' });
       setInviteEmail('');
-      qc.invalidateQueries({ queryKey: ['all-users'] });
     } catch (e) {
       toast({ title: 'Invite failed', description: e.message, variant: 'destructive' });
     }
@@ -114,13 +101,10 @@ export default function StaffDirectory() {
     toast({ title: 'Invite code copied!' });
   }
 
-  const grouped = {
-    admin: staff.filter(s => s.role === 'admin'),
-    legislative_director: staff.filter(s => s.role === 'legislative_director'),
-    staffer: staff.filter(s => s.role === 'staffer'),
-    intern: staff.filter(s => s.role === 'intern'),
-    user: staff.filter(s => s.role === 'user' || !s.role),
-  };
+  const grouped = MEMBERSHIP_ROLES.reduce((acc, r) => {
+    acc[r.value] = staff.filter(s => s.membershipRole === r.value);
+    return acc;
+  }, {});
 
   return (
     <div className="space-y-6">
@@ -129,56 +113,33 @@ export default function StaffDirectory() {
           <h1 className="text-2xl font-bold">Staff Directory</h1>
           <p className="text-muted-foreground text-sm">{staff.length} member{staff.length !== 1 ? 's' : ''}</p>
         </div>
+        <Button variant="outline" size="sm" onClick={() => {
+          qc.invalidateQueries({ queryKey: ['memberships', office?.id] });
+          qc.invalidateQueries({ queryKey: ['membership-users'] });
+        }}>
+          <RefreshCw className="w-4 h-4 mr-1.5" /> Refresh
+        </Button>
       </div>
-
-      {/* Pending Invites */}
-      {isAdmin && pendingInvites.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle className="text-base">Pending Invites</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            {pendingInvites.map(invite => (
-              <div key={invite.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                <div>
-                  <p className="text-sm font-medium">{invite.email}</p>
-                  <p className="text-xs text-muted-foreground">Invited, waiting to join</p>
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={async () => {
-                    await base44.integrations.Core.SendEmail({
-                      to: invite.email,
-                      subject: `Reminder: Join ${office?.name}`,
-                      body: `Hi,\n\nThis is a reminder to join ${office?.name} on Assembly Bill Watch.\n\n` +
-                        `Use this invite code: ${office?.invite_code}\n\n` +
-                        `Log in and select "Join an Existing Office" to get started.`,
-                    });
-                    toast({ title: 'Reminder sent', description: `Email sent to ${invite.email}` });
-                  }}>Resend</Button>
-                  <Button variant="outline" size="sm" onClick={() => handleCancelInvite(invite)}>Cancel</Button>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
 
       {/* Invite Section */}
       {isAdmin && (
         <Card>
           <CardHeader><CardTitle className="text-base">Invite Team Members</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 flex-1">
-                <Input
-                  placeholder="Email address"
-                  value={inviteEmail}
-                  onChange={e => setInviteEmail(e.target.value)}
-                  type="email"
-                  className="flex-1"
-                />
-                <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} className="text-sm border rounded-md px-2.5 py-2 bg-background">
-                  {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                </select>
-              </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <Input
+                placeholder="Email address"
+                value={inviteEmail}
+                onChange={e => setInviteEmail(e.target.value)}
+                type="email"
+                className="flex-1 min-w-48"
+                onKeyDown={e => e.key === 'Enter' && handleInvite()}
+              />
+              <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} className="text-sm border rounded-md px-2.5 py-2 bg-background">
+                {MEMBERSHIP_ROLES.filter(r => r.value !== 'OWNER').map(r => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
               <Button onClick={handleInvite} disabled={inviting || !inviteEmail.trim()}>
                 <Mail className="w-4 h-4 mr-1.5" /> {inviting ? 'Sending...' : 'Send Invite'}
               </Button>
@@ -186,11 +147,11 @@ export default function StaffDirectory() {
 
             <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
               <div>
-                <p className="text-xs text-muted-foreground">Office Invite Code</p>
+                <p className="text-xs text-muted-foreground">Office Invite Code — share this to let anyone join</p>
                 <p className="font-mono font-semibold tracking-wider text-lg">{office?.invite_code}</p>
               </div>
               <Button variant="outline" size="sm" onClick={copyInviteCode}>
-                <Copy className="w-4 h-4 mr-1.5" /> Copy Code
+                <Copy className="w-4 h-4 mr-1.5" /> Copy
               </Button>
             </div>
           </CardContent>
@@ -199,18 +160,20 @@ export default function StaffDirectory() {
 
       {/* Staff List */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-20"><div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" /></div>
+        <div className="flex items-center justify-center py-20">
+          <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" />
+        </div>
       ) : staff.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center">
             <Users className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
             <p className="text-muted-foreground">No staff members yet</p>
-            <p className="text-xs text-muted-foreground mt-1">Share the invite code to add team members</p>
+            <p className="text-xs text-muted-foreground mt-1">Share the invite code above to add team members</p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-6">
-          {ROLES.map(({ value, label, icon: RoleIcon }) => {
+          {MEMBERSHIP_ROLES.map(({ value, label, icon: RoleIcon }) => {
             const members = grouped[value] || [];
             if (members.length === 0) return null;
             return (
@@ -220,13 +183,12 @@ export default function StaffDirectory() {
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {members.map(member => {
-                    const info = roleInfo(member.role);
-                    const RoleIcon = info.icon;
-                    const initials = (member.full_name || 'U').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+                    const info = roleInfo(member.membershipRole);
+                    const initials = (member.full_name || member.email || 'U').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
                     const isCurrentUser = member.email === user?.email;
 
                     return (
-                      <Card key={member.id} className="relative">
+                      <Card key={member.membershipId} className="relative">
                         <CardContent className="p-4">
                           <div className="flex items-start gap-3">
                             <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold text-sm flex-shrink-0">
@@ -234,19 +196,20 @@ export default function StaffDirectory() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="font-medium text-sm truncate">
-                                {member.full_name || 'Unknown'}
+                                {member.full_name || member.email || 'Unknown'}
                                 {isCurrentUser && <span className="text-[10px] text-muted-foreground ml-1">(you)</span>}
                               </p>
                               <p className="text-xs text-muted-foreground truncate">{member.email}</p>
-                              {member.title && <p className="text-xs text-muted-foreground mt-0.5">{member.title}</p>}
                               <div className="flex items-center gap-2 mt-2">
-                                {isAdmin && !isCurrentUser ? (
+                                {isAdmin && !isCurrentUser && member.membershipRole !== 'OWNER' ? (
                                   <select
-                                    value={member.role}
+                                    value={member.membershipRole}
                                     onChange={e => handleRoleChange(member, e.target.value)}
                                     className="text-[11px] border rounded px-1.5 py-1 bg-background"
                                   >
-                                    {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                                    {MEMBERSHIP_ROLES.filter(r => r.value !== 'OWNER').map(r => (
+                                      <option key={r.value} value={r.value}>{r.label}</option>
+                                    ))}
                                   </select>
                                 ) : (
                                   <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${info.color}`}>
@@ -255,7 +218,7 @@ export default function StaffDirectory() {
                                 )}
                               </div>
                             </div>
-                            {isAdmin && !isCurrentUser && (
+                            {isAdmin && !isCurrentUser && member.membershipRole !== 'OWNER' && (
                               <button onClick={() => handleRemove(member)} className="p-1.5 text-muted-foreground hover:text-destructive rounded transition-colors">
                                 <Trash2 className="w-4 h-4" />
                               </button>
