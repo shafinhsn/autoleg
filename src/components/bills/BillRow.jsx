@@ -155,8 +155,8 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
   const STATUS_PRIORITY_ORDER = [
     'In Assembly Committee', 'In Senate Committee',
     'Ordered to Third Reading', 'Advanced to Third Reading',
-    'Substituted',
     'Assembly Floor Calendar', 'Senate Floor Calendar',
+    'Substituted',
     'Passed Senate', 'Passed Assembly',
     'Delivered to Governor', 'Signed', 'Vetoed',
   ];
