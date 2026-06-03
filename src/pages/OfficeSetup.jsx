@@ -129,8 +129,9 @@ export default function OfficeSetup() {
     } catch (e) {
       console.error('Auto-fix check failed:', e);
       setMode(null);
+    } finally {
+      setLoadingOffices(false);
     }
-    setLoadingOffices(false);
   }
 
   async function handleSelectOffice(office) {
