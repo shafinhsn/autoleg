@@ -65,7 +65,7 @@ function SelectOfficesView({ offices, onSelect, loading, error, onBack }) {
 }
 
 export default function OfficeSetup() {
-  const [mode, setMode] = useState(null); // null | 'select' | 'create' | 'join'
+  const [mode, setMode] = useState(null);
   const [offices, setOffices] = useState([]);
   const [loadingOffices, setLoadingOffices] = useState(false);
   const [officeName, setOfficeName] = useState('');
@@ -74,19 +74,16 @@ export default function OfficeSetup() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Handle invite_code from URL parameter
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const urlInviteCode = urlParams.get('invite_code');
     if (urlInviteCode) {
       setInviteCode(urlInviteCode);
       setMode('join');
+      setLoadingOffices(false);
+    } else {
+      autoFixAndLoadOffices();
     }
-  }, []);
-
-  // On mount: check if user has memberships or is creator of any office
-  useEffect(() => {
-    autoFixAndLoadOffices();
   }, []);
 
   async function autoFixAndLoadOffices() {
@@ -94,13 +91,11 @@ export default function OfficeSetup() {
     try {
       const user = await base44.auth.me();
 
-      // If user already has an active_office_id, they're set — reload
       if (user.active_office_id) {
         window.location.reload();
         return;
       }
 
-      // Find all offices where this user has a membership
       const userMemberships = await base44.entities.Membership.filter({ user_id: user.id });
       const officeIds = userMemberships.map(m => m.office_id);
       
@@ -111,7 +106,6 @@ export default function OfficeSetup() {
       }
 
       if (userOffices.length === 1) {
-        // Only one office — auto-select
         const office = userOffices[0];
         await base44.auth.updateMe({ active_office_id: office.id });
         window.location.reload();
@@ -119,11 +113,9 @@ export default function OfficeSetup() {
       }
 
       if (userOffices.length > 1) {
-        // Multiple offices — let them pick
         setOffices(userOffices);
         setMode('select');
       } else {
-        // No offices — show the normal create/join screen
         setMode(null);
       }
     } catch (e) {
@@ -139,7 +131,6 @@ export default function OfficeSetup() {
     try {
       const user = await base44.auth.me();
       
-      // Ensure membership exists
       const memberships = await base44.entities.Membership.filter({
         user_id: user.id,
         office_id: office.id,
@@ -168,7 +159,6 @@ export default function OfficeSetup() {
     try {
       const user = await base44.auth.me();
 
-      // Check for duplicate office name
       const existing = await base44.entities.Office.filter({ name: officeName.trim() });
       if (existing.length > 0) {
         setError('An office with this name already exists. Please choose a different name.');
@@ -178,7 +168,6 @@ export default function OfficeSetup() {
 
       const code = Math.random().toString(36).substring(2, 10).toUpperCase();
       
-      // Requirement 2: Create office with creator_id
       const office = await base44.entities.Office.create({
         name: officeName.trim(),
         creator_id: user.id,
@@ -186,23 +175,13 @@ export default function OfficeSetup() {
         branding_color: brandingColor,
       });
 
-      console.log('[OfficeSetup] Office created:', office.id);
-      console.log('[OfficeSetup] Creator ID:', user.id);
-
-      // Requirement 2: Automatically create membership record for creator with OWNER role
-      const membership = await base44.entities.Membership.create({
+      await base44.entities.Membership.create({
         user_id: user.id,
         office_id: office.id,
         role: 'OWNER',
       });
 
-      console.log('[OfficeSetup] Membership created:', membership.id, 'Role: OWNER');
-
-      // Requirement 2: Set the newly created office as the user's active office
       await base44.auth.updateMe({ active_office_id: office.id });
-      
-      console.log('[OfficeSetup] User active_office_id set to:', office.id);
-      
       window.location.reload();
     } catch (e) {
       console.error('Error creating office:', e);
@@ -227,7 +206,6 @@ export default function OfficeSetup() {
       
       const office = offices[0];
       
-      // Requirement 4: Check if already a member
       const existingMembership = await base44.entities.Membership.filter({
         user_id: user.id,
         office_id: office.id,
@@ -239,18 +217,12 @@ export default function OfficeSetup() {
         return;
       }
       
-      // Requirement 4: Joining creates a membership record with role assigned by invitation
-      // For invite code joining, default to STAFF role (can be customized later)
       await base44.entities.Membership.create({
         user_id: user.id,
         office_id: office.id,
         role: 'STAFF',
       });
       
-      console.log('[OfficeSetup] User joined office via invite code:', office.id);
-      console.log('[OfficeSetup] Membership created with role: STAFF');
-      
-      // Set active office
       await base44.auth.updateMe({ active_office_id: office.id });
       window.location.reload();
     } catch (e) {
@@ -279,12 +251,10 @@ export default function OfficeSetup() {
           <p className="text-muted-foreground mt-2">Set up your legislative office to get started</p>
         </div>
 
-        {/* SELECT existing offices */}
-         {mode === 'select' && (
-           <SelectOfficesView offices={offices} onSelect={handleSelectOffice} loading={loading} error={error} onBack={() => setMode(null)} />
-         )}
+        {mode === 'select' && (
+          <SelectOfficesView offices={offices} onSelect={handleSelectOffice} loading={loading} error={error} onBack={() => setMode(null)} />
+        )}
 
-        {/* MAIN CHOICE */}
         {mode === null && (
           <div className="space-y-4">
             <button onClick={() => setMode('create')} className="w-full p-6 rounded-xl border-2 border-border bg-card hover:border-primary/50 transition-all text-left group">
@@ -328,7 +298,6 @@ export default function OfficeSetup() {
           </div>
         )}
 
-        {/* CREATE */}
         {mode === 'create' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-card rounded-xl border p-8 space-y-6">
             <h2 className="text-xl font-semibold">Create Your Office</h2>
@@ -355,7 +324,6 @@ export default function OfficeSetup() {
           </motion.div>
         )}
 
-        {/* JOIN */}
         {mode === 'join' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-card rounded-xl border p-8 space-y-6">
             <h2 className="text-xl font-semibold">
