@@ -42,51 +42,69 @@ async function fetchBillFromAPI(bill, apiKey) {
     // Committee — always overwrite with what the API says (replaces any manually added tags)
     updateData.committee = result.status?.committeeName ? [result.status.committeeName] : [];
 
-    const statusType = result.status?.statusType || '';
-    const statusDesc = result.status?.statusDesc || '';
+    const STATUS_TYPE_MAP = {
+        'SIGNED_BY_GOV': 'Signed',
+        'VETOED': 'Vetoed',
+        'DELIVERED_TO_GOV': 'Delivered to Governor',
+        'PASSED_ASSEMBLY': 'Passed Assembly',
+        'PASSED_SENATE': 'Passed Senate',
+        'SENATE_FLOOR': 'Senate Floor Calendar',
+        'ASSEMBLY_FLOOR': 'Assembly Floor Calendar',
+        'IN_SENATE_COMM': 'In Senate Committee',
+        'IN_ASSEMBLY_COMM': 'In Assembly Committee',
+        'SUBSTITUTED': 'Substituted',
+    };
 
-    // Action history is the most reliable source — scan ALL actions newest-first
-    // and pick the highest-priority milestone that has actually occurred.
-    const actions = result.actions?.items || [];
-    const reversedActions = [...actions].reverse();
+    // If this bill was substituted by a companion, follow the companion for real status
+    const substitutedBy = result.substitutedBy;
+    if (substitutedBy?.basePrintNo) {
+        const compBillNo = substitutedBy.basePrintNo;
+        const compSession = substitutedBy.session || 2025;
+        let compStatusLabel = null;
+        try {
+            const compUrl = `https://legislation.nysenate.gov/api/3/bills/${compSession}/${compBillNo}?key=${key}`;
+            const compResp = await fetch(compUrl);
+            if (compResp.ok) {
+                const compData = await compResp.json();
+                const compStatus = compData?.result?.status;
+                if (compStatus) {
+                    compStatusLabel = STATUS_TYPE_MAP[compStatus.statusType] || compStatus.statusDesc || null;
+                }
+            }
+        } catch (e) {
+            console.error(`${billNum} companion lookup failed: ${e.message}`);
+        }
+        console.log(`  ${billNum} substituted by ${compBillNo} → companion status: ${compStatusLabel}`);
+        updateData.latest_status = [compStatusLabel || 'Substituted'];
+    } else {
+        // Use action history — scan newest-first, pick highest milestone found
+        const actions = result.actions?.items || [];
+        const reversedActions = [...actions].reverse();
+        const actionPriority = [
+            { test: (t) => t.includes('SIGNED CHAP') || t.includes('APPROVED BY GOV') || t.includes('CHAPTERED'), label: 'Signed' },
+            { test: (t) => t.includes('VETOED') || t.includes('POCKET VETO'), label: 'Vetoed' },
+            { test: (t) => t.includes('DELIVERED TO GOV'), label: 'Delivered to Governor' },
+            { test: (t) => t.includes('PASSED ASSEMBLY') || t.includes('RETURNED TO SENATE'), label: 'Passed Assembly' },
+            { test: (t) => t.includes('PASSED SENATE') && !t.includes('DELIVERED TO ASSEMBLY'), label: 'Passed Senate' },
+            { test: (t) => (t.includes('ORDERED TO THIRD READING') || t.includes('ADVANCED TO THIRD READING')) && !t.includes('SUBSTITUTED'), label: 'Ordered to Third Reading' },
+        ];
 
-    // Priority order top-to-bottom: first match wins
-    const actionPriority = [
-        { test: (t) => t.includes('SIGNED') || t.includes('CHAPTERED'), label: 'Signed' },
-        { test: (t) => t.includes('VETOED') || t.includes('POCKET VETO'), label: 'Vetoed' },
-        { test: (t) => t.includes('DELIVERED TO GOV'), label: 'Delivered to Governor' },
-        { test: (t) => t.includes('RETURNED TO SENATE') || t.includes('PASSED ASSEMBLY'), label: 'Passed Assembly' },
-        { test: (t) => t.includes('PASSED SENATE'), label: 'Passed Senate' },
-        { test: (t) => t.includes('SUBSTITUTED'), label: 'Substituted' },
-        { test: (t) => t.includes('ORDERED TO THIRD READING') || t.includes('ADVANCED TO THIRD READING') || t.includes('THIRD READING CAL'), label: 'Ordered to Third Reading' },
-    ];
+        let statusLabel = null;
+        for (const priority of actionPriority) {
+            const found = reversedActions.find(a => priority.test((a.text || '').toUpperCase()));
+            if (found) { statusLabel = priority.label; break; }
+        }
 
-    let statusLabel = null;
-    for (const priority of actionPriority) {
-        // Check if this milestone ever occurred (any action in history matches)
-        const found = reversedActions.find(a => priority.test((a.text || '').toUpperCase()));
-        if (found) { statusLabel = priority.label; break; }
-    }
+        // Fall back to statusType map
+        if (!statusLabel) {
+            const statusType = result.status?.statusType || '';
+            const statusDesc = result.status?.statusDesc || '';
+            statusLabel = STATUS_TYPE_MAP[statusType] || statusDesc || null;
+        }
 
-    // Fall back to statusType map only if no action history match
-    if (!statusLabel) {
-        const typeMap = {
-            'SIGNED_BY_GOV': 'Signed',
-            'VETOED': 'Vetoed',
-            'DELIVERED_TO_GOV': 'Delivered to Governor',
-            'PASSED_ASSEMBLY': 'Passed Assembly',
-            'PASSED_SENATE': 'Passed Senate',
-            'SENATE_FLOOR': 'Senate Floor Calendar',
-            'ASSEMBLY_FLOOR': 'Assembly Floor Calendar',
-            'IN_SENATE_COMM': 'In Senate Committee',
-            'IN_ASSEMBLY_COMM': 'In Assembly Committee',
-            'SUBSTITUTED': 'Substituted',
-        };
-        statusLabel = typeMap[statusType] || statusDesc || null;
-    }
-
-    if (statusLabel) {
-        updateData.latest_status = [statusLabel];
+        const latestAction = actions[actions.length - 1];
+        console.log(`  ${billNum} | latest action: "${latestAction?.text}" | computed: ${statusLabel}`);
+        if (statusLabel) updateData.latest_status = [statusLabel];
     }
 
     // Assembly sponsor
