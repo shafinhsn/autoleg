@@ -9,15 +9,14 @@ import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/use-toast';
 
 const ROLES = [
-  { value: 'admin', label: 'Admin', icon: Shield, color: 'text-red-600 bg-red-50' },
-  { value: 'legislative_director', label: 'Legislative Director', icon: Crown, color: 'text-amber-600 bg-amber-50' },
-  { value: 'staffer', label: 'General Staffer', icon: UserCheck, color: 'text-blue-600 bg-blue-50' },
-  { value: 'intern', label: 'Intern', icon: GraduationCap, color: 'text-emerald-600 bg-emerald-50' },
-  { value: 'user', label: 'Unassigned (New)', icon: UserCheck, color: 'text-gray-600 bg-gray-50' },
+  { value: 'OWNER', label: 'Owner', icon: Crown, color: 'text-amber-600 bg-amber-50' },
+  { value: 'ADMIN', label: 'Admin', icon: Shield, color: 'text-red-600 bg-red-50' },
+  { value: 'STAFF', label: 'Staff', icon: UserCheck, color: 'text-blue-600 bg-blue-50' },
+  { value: 'READ_ONLY', label: 'Read Only', icon: GraduationCap, color: 'text-gray-600 bg-gray-50' },
 ];
 
 function roleInfo(role) {
-  return ROLES.find(r => r.value === role) || ROLES.find(r => r.value === 'user');
+  return ROLES.find(r => r.value === role) || ROLES[3];
 }
 
 export default function StaffDirectory() {
@@ -27,33 +26,40 @@ export default function StaffDirectory() {
   const [inviteRole, setInviteRole] = useState('staffer');
   const [inviting, setInviting] = useState(false);
 
-  const { data: staff = [], isLoading } = useQuery({
-    queryKey: ['staff', office?.id],
-    queryFn: () => base44.entities.User.filter({ office_id: office?.id }),
+  const { data: memberships = [] } = useQuery({
+    queryKey: ['memberships', office?.id],
+    queryFn: () => base44.entities.Membership.filter({ office_id: office?.id }),
     enabled: !!office?.id,
   });
 
-  // Get all users to find pending invites (invited but not yet joined)
-  const { data: allUsers = [] } = useQuery({
+  const { data: allUsers = [], isLoading } = useQuery({
     queryKey: ['all-users'],
     queryFn: () => base44.entities.User.list(),
-    enabled: isAdmin,
+    enabled: memberships.length > 0,
   });
+
+  // Build staff list from memberships joined with user records
+  const staff = memberships
+    .map(m => {
+      const u = allUsers.find(u => u.id === m.user_id);
+      if (!u) return null;
+      return { ...u, membershipRole: m.role, membershipId: m.id };
+    })
+    .filter(Boolean);
 
   // Show pending invites (users without office_id but with is_active=false)
   const pendingInvites = isAdmin ? allUsers.filter(u => !u.office_id && u.is_active === false && u.email) : [];
 
   async function handleRoleChange(member, newRole) {
-    await base44.entities.User.update(member.id, { role: newRole });
-    qc.invalidateQueries({ queryKey: ['staff'] });
+    await base44.entities.Membership.update(member.membershipId, { role: newRole });
+    qc.invalidateQueries({ queryKey: ['memberships', office?.id] });
     toast({ title: `Updated ${member.full_name}'s role` });
   }
 
   async function handleRemove(member) {
     if (!confirm(`Remove ${member.full_name || member.email} from this office? They will no longer have access.`)) return;
-    await base44.entities.User.update(member.id, { office_id: '', is_active: false });
-    qc.invalidateQueries({ queryKey: ['staff'] });
-    qc.invalidateQueries({ queryKey: ['all-users'] });
+    await base44.entities.Membership.delete(member.membershipId);
+    qc.invalidateQueries({ queryKey: ['memberships', office?.id] });
     toast({ title: `Removed ${member.full_name || member.email}` });
   }
 
@@ -115,11 +121,10 @@ export default function StaffDirectory() {
   }
 
   const grouped = {
-    admin: staff.filter(s => s.role === 'admin'),
-    legislative_director: staff.filter(s => s.role === 'legislative_director'),
-    staffer: staff.filter(s => s.role === 'staffer'),
-    intern: staff.filter(s => s.role === 'intern'),
-    user: staff.filter(s => s.role === 'user' || !s.role),
+    OWNER: staff.filter(s => s.membershipRole === 'OWNER'),
+    ADMIN: staff.filter(s => s.membershipRole === 'ADMIN'),
+    STAFF: staff.filter(s => s.membershipRole === 'STAFF'),
+    READ_ONLY: staff.filter(s => s.membershipRole === 'READ_ONLY'),
   };
 
   return (
@@ -212,6 +217,8 @@ export default function StaffDirectory() {
         <div className="space-y-6">
           {ROLES.map(({ value, label, icon: RoleIcon }) => {
             const members = grouped[value] || [];
+            // Use membershipRole for the role badge
+
             if (members.length === 0) return null;
             return (
               <div key={value}>
@@ -220,7 +227,7 @@ export default function StaffDirectory() {
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {members.map(member => {
-                    const info = roleInfo(member.role);
+                    const info = roleInfo(member.membershipRole);
                     const RoleIcon = info.icon;
                     const initials = (member.full_name || 'U').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
                     const isCurrentUser = member.email === user?.email;
@@ -240,13 +247,13 @@ export default function StaffDirectory() {
                               <p className="text-xs text-muted-foreground truncate">{member.email}</p>
                               {member.title && <p className="text-xs text-muted-foreground mt-0.5">{member.title}</p>}
                               <div className="flex items-center gap-2 mt-2">
-                                {isAdmin && !isCurrentUser ? (
+                                {isAdmin && !isCurrentUser && member.membershipRole !== 'OWNER' ? (
                                   <select
-                                    value={member.role}
+                                    value={member.membershipRole}
                                     onChange={e => handleRoleChange(member, e.target.value)}
                                     className="text-[11px] border rounded px-1.5 py-1 bg-background"
                                   >
-                                    {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                                    {ROLES.filter(r => r.value !== 'OWNER').map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                                   </select>
                                 ) : (
                                   <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${info.color}`}>

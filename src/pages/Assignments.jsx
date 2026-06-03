@@ -37,11 +37,21 @@ export default function Assignments() {
     enabled: !!office?.id,
   });
 
-  const { data: staff = [] } = useQuery({
-    queryKey: ['staff', office?.id],
-    queryFn: () => base44.entities.User.filter({ office_id: office?.id }),
+  const { data: memberships = [] } = useQuery({
+    queryKey: ['memberships', office?.id],
+    queryFn: () => base44.entities.Membership.filter({ office_id: office?.id }),
     enabled: !!office?.id,
   });
+
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ['all-users'],
+    queryFn: () => base44.entities.User.list(),
+    enabled: memberships.length > 0,
+  });
+
+  const staff = memberships
+    .map(m => allUsers.find(u => u.id === m.user_id))
+    .filter(Boolean);
 
   const { data: bills = [] } = useQuery({
     queryKey: ['bills', office?.id],
