@@ -47,6 +47,9 @@
     "read": {
       "$or": [
         {
+          "data.office_id": "{{user.active_office_id}}"
+        },
+        {
           "data.user_id": "{{user.id}}"
         },
         {

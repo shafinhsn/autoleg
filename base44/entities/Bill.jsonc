@@ -152,28 +152,17 @@
     "office_id"
   ],
   "rls": {
-    "create": {
-      "data.office_id": "{{user.active_office_id}}"
-    },
+    "create": true,
     "read": {
       "data.office_id": "{{user.active_office_id}}"
     },
     "update": {
-      "$or": [
-        {
-          "created_by_id": "{{user.id}}"
-        },
-        {
-          "user_condition": {
-            "role": "admin"
-          }
-        }
-      ]
+      "data.office_id": "{{user.active_office_id}}"
     },
     "delete": {
       "$or": [
         {
-          "created_by_id": "{{user.id}}"
+          "data.office_id": "{{user.active_office_id}}"
         },
         {
           "user_condition": {
