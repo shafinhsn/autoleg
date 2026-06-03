@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useOffice } from '@/hooks/useOffice';
-import { Upload, CheckCircle2, Sparkles, Loader2 } from 'lucide-react';
+import { Upload, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -21,7 +21,6 @@ export default function ImportCsv() {
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0, percent: 0 });
   const [fileName, setFileName] = useState('');
-  const [aiAnalyzing, setAiAnalyzing] = useState(false);
   const [failedBills, setFailedBills] = useState([]);
   const [retrying, setRetrying] = useState(false);
 
@@ -65,32 +64,12 @@ export default function ImportCsv() {
       setHeaders(hdrs);
       setParsed(rows);
 
-      // AI-assisted header detection
-      setAiAnalyzing(true);
-      try {
-        const response = await base44.functions.invoke('analyzeCsvHeaders', {
-          headers: hdrs,
-          sampleRows: rows.slice(0, 5),
-        });
-        if (response.data.mapping) {
-          setMapping(response.data.mapping);
-        } else {
-          // Fallback to auto-map
-          const autoMap = {};
-          hdrs.forEach(h => {
-            autoMap[h] = COLUMN_MAP[h.toLowerCase().trim()] || 'skip';
-          });
-          setMapping(autoMap);
-        }
-      } catch (e) {
-        console.error('AI analysis failed, using fallback', e);
-        const autoMap = {};
-        hdrs.forEach(h => {
-          autoMap[h] = COLUMN_MAP[h.toLowerCase().trim()] || 'skip';
-        });
-        setMapping(autoMap);
-      }
-      setAiAnalyzing(false);
+      // Rule-based header mapping (no backend call needed)
+      const autoMap = {};
+      hdrs.forEach(h => {
+        autoMap[h] = COLUMN_MAP[h.toLowerCase().trim()] || 'skip';
+      });
+      setMapping(autoMap);
     };
     reader.readAsArrayBuffer(file);
   }
@@ -307,7 +286,7 @@ export default function ImportCsv() {
         >
           <Upload className="w-10 h-10 mx-auto text-muted-foreground mb-4" />
           <p className="font-medium">Drop your file here or click to browse</p>
-          <p className="text-sm text-muted-foreground mt-1">Supports .csv and .xlsx files • AI-powered header detection</p>
+          <p className="text-sm text-muted-foreground mt-1">Supports .csv and .xlsx files • Auto header detection</p>
           <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFile} />
         </div>
       )}
@@ -318,7 +297,6 @@ export default function ImportCsv() {
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                 <span>Column Mapping — <span className="font-normal text-muted-foreground">{fileName}</span></span>
-                {aiAnalyzing && <><Loader2 className="w-4 h-4 animate-spin text-primary" /><span className="text-xs text-primary">AI analyzing...</span></>}
                 <span className="ml-auto text-sm font-normal text-muted-foreground">({parsed.length} rows)</span>
               </CardTitle>
             </CardHeader>
@@ -357,8 +335,8 @@ export default function ImportCsv() {
           )}
 
           <div className="flex items-center gap-3">
-            <Button onClick={handleImport} disabled={importing || !hasBillNumber || aiAnalyzing}>
-              {importing ? 'Importing...' : aiAnalyzing ? 'AI Analyzing...' : `Import ${parsed.length} Rows`}
+            <Button onClick={handleImport} disabled={importing || !hasBillNumber}>
+              {importing ? 'Importing...' : `Import ${parsed.length} Rows`}
             </Button>
             <Button variant="ghost" onClick={reset} disabled={importing}>Cancel</Button>
           </div>
