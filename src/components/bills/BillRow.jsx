@@ -149,7 +149,28 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
   }
 
   // Normalize arrays — support both string and array
-  const billStatuses = Array.isArray(bill.latest_status) ? bill.latest_status : (bill.latest_status ? [bill.latest_status] : []);
+  const rawStatuses = Array.isArray(bill.latest_status) ? bill.latest_status : (bill.latest_status ? [bill.latest_status] : []);
+
+  // Priority order: higher index = higher priority. Always display the highest-priority status.
+  const STATUS_PRIORITY_ORDER = [
+    'In Assembly Committee', 'In Senate Committee',
+    'Ordered to Third Reading', 'Advanced to Third Reading',
+    'Substituted',
+    'Assembly Floor Calendar', 'Senate Floor Calendar',
+    'Passed Senate', 'Passed Assembly',
+    'Delivered to Governor', 'Signed', 'Vetoed',
+  ];
+  function resolveDisplayStatuses(statuses) {
+    if (statuses.length <= 1) return statuses;
+    let best = null;
+    let bestRank = -1;
+    for (const s of statuses) {
+      const rank = STATUS_PRIORITY_ORDER.findIndex(p => s?.toLowerCase().includes(p.toLowerCase()));
+      if (rank > bestRank) { bestRank = rank; best = s; }
+    }
+    return best ? [best] : [statuses[0]];
+  }
+  const billStatuses = resolveDisplayStatuses(rawStatuses);
   const billTags = Array.isArray(bill.tags) ? bill.tags : (bill.tags ? [bill.tags] : []);
   const billCommittees = Array.isArray(bill.committee) ? bill.committee : (bill.committee ? [bill.committee] : []);
   

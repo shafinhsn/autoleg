@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useOffice } from '@/hooks/useOffice';
@@ -30,6 +30,9 @@ export default function Assignments() {
   const [showForm, setShowForm] = useState(false);
   const [uploadingFor, setUploadingFor] = useState(null);
   const [search, setSearch] = useState('');
+  const [billSearch, setBillSearch] = useState('');
+  const [showBillResults, setShowBillResults] = useState(false);
+  const billSearchRef = useState(null);
   const [form, setForm] = useState({
     title: '', description: '', assigned_to: '', due_date: '',
     urgency: 'medium', bill_id: '',
@@ -68,6 +71,7 @@ export default function Assignments() {
     });
     qc.invalidateQueries({ queryKey: ['assignments'] });
     setForm({ title: '', description: '', assigned_to: '', due_date: '', urgency: 'medium', bill_id: '' });
+    setBillSearch('');
     setShowForm(false);
     toast({ title: 'Assignment created' });
   }
@@ -104,6 +108,13 @@ export default function Assignments() {
         : 'File link saved to assignment.',
     });
   }
+
+  // Close bill search dropdown on outside click
+  useEffect(() => {
+    function handleClick() { setShowBillResults(false); }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   const urgencyOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
   const sorted = [...myAssignments]
@@ -174,13 +185,54 @@ export default function Assignments() {
                   {staff.map(s => <option key={s.id} value={s.email}>{s.full_name || s.email}</option>)}
                 </select>
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 relative">
                 <Label>Linked Bill</Label>
-                <select value={form.bill_id} onChange={e => setForm(f => ({ ...f, bill_id: e.target.value }))}
-                  className="w-full text-sm border rounded-md px-2.5 py-2 bg-background">
-                  <option value="">— None —</option>
-                  {bills.map(b => <option key={b.id} value={b.id}>{b.bill_number} {b.short_name ? `- ${b.short_name}` : ''}</option>)}
-                </select>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    placeholder="Search by bill number or name..."
+                    value={billSearch}
+                    onChange={e => {
+                      setBillSearch(e.target.value);
+                      setShowBillResults(true);
+                      if (!e.target.value) setForm(f => ({ ...f, bill_id: '' }));
+                    }}
+                    onFocus={() => setShowBillResults(true)}
+                    className="pl-8 text-sm"
+                  />
+                  {form.bill_id && !showBillResults && (
+                    <button type="button" onClick={() => { setForm(f => ({ ...f, bill_id: '' })); setBillSearch(''); }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs">✕</button>
+                  )}
+                </div>
+                {showBillResults && billSearch.trim() && (
+                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                    {bills
+                      .filter(b => {
+                        const q = billSearch.toLowerCase();
+                        return b.bill_number?.toLowerCase().includes(q) || b.short_name?.toLowerCase().includes(q) || b.title?.toLowerCase().includes(q);
+                      })
+                      .slice(0, 20)
+                      .map(b => (
+                        <button key={b.id} type="button"
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-muted/60 flex items-center gap-2 border-b last:border-0"
+                          onMouseDown={() => {
+                            setForm(f => ({ ...f, bill_id: b.id }));
+                            setBillSearch(`${b.bill_number}${b.short_name ? ` — ${b.short_name}` : ''}`);
+                            setShowBillResults(false);
+                          }}>
+                          <span className="font-mono font-semibold text-primary">{b.bill_number}</span>
+                          {b.short_name && <span className="text-muted-foreground">{b.short_name}</span>}
+                        </button>
+                      ))}
+                    {bills.filter(b => {
+                      const q = billSearch.toLowerCase();
+                      return b.bill_number?.toLowerCase().includes(q) || b.short_name?.toLowerCase().includes(q) || b.title?.toLowerCase().includes(q);
+                    }).length === 0 && (
+                      <p className="text-sm text-muted-foreground px-3 py-2">No bills found</p>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="space-y-1">
                 <Label>Due Date</Label>
