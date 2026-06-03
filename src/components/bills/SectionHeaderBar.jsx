@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, Pencil, Trash2, GripVertical } from 'lucide-
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
-export default function SectionHeaderBar({ section, billCount, expanded, onToggle, onUpdate, onDelete, isAdmin, dragHandleProps, isDragging }) {
+export default function SectionHeaderBar({ section, billCount, expanded, onToggle, onUpdate, onDelete, dragHandleProps, isDragging }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(section.name);
   const [color, setColor] = useState(section.color || '#1e40af');
@@ -19,16 +19,14 @@ export default function SectionHeaderBar({ section, billCount, expanded, onToggl
       style={{ backgroundColor: section.color || '#1e40af' }}
       onClick={() => !editing && onToggle()}
     >
-      {isAdmin && (
-        <div
-          {...dragHandleProps}
-          onClick={e => e.stopPropagation()}
-          className="p-1 hover:bg-white/20 rounded cursor-grab active:cursor-grabbing flex-shrink-0"
-          title="Drag to reorder"
-        >
-          <GripVertical className="w-4 h-4 opacity-70" />
-        </div>
-      )}
+      <div
+        {...dragHandleProps}
+        onClick={e => e.stopPropagation()}
+        className="p-1 hover:bg-white/20 rounded cursor-grab active:cursor-grabbing flex-shrink-0"
+        title="Drag to reorder"
+      >
+        <GripVertical className="w-4 h-4 opacity-70" />
+      </div>
 
       {expanded ? <ChevronDown className="w-4 h-4 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 flex-shrink-0" />}
 
@@ -43,16 +41,14 @@ export default function SectionHeaderBar({ section, billCount, expanded, onToggl
         <>
           <span className="flex-1 truncate">{section.name}</span>
           <span className="text-xs font-normal opacity-80 flex-shrink-0">{billCount} bill{billCount !== 1 ? 's' : ''}</span>
-          {isAdmin && (
-            <div className="flex items-center gap-1 ml-1" onClick={e => e.stopPropagation()}>
-              <button onClick={() => setEditing(true)} className="p-1 hover:bg-white/20 rounded">
-                <Pencil className="w-3.5 h-3.5" />
-              </button>
-              <button onClick={() => onDelete(section.id)} className="p-1 hover:bg-white/20 rounded">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
+          <div className="flex items-center gap-1 ml-1" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setEditing(true)} className="p-1 hover:bg-white/20 rounded">
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => onDelete(section.id)} className="p-1 hover:bg-white/20 rounded">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </>
       )}
     </div>

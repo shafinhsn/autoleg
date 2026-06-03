@@ -444,7 +444,7 @@ export default function Bills() {
                           key={section.id}
                           draggableId={section.id}
                           index={index}
-                          isDragDisabled={!isAdmin}
+                          isDragDisabled={false}
                         >
                           {(drag, snapshot) => (
                             <>
@@ -457,7 +457,6 @@ export default function Bills() {
                                     onToggle={() => toggleSection(section.id)}
                                     onUpdate={handleUpdateSection}
                                     onDelete={handleDeleteSection}
-                                    isAdmin={isAdmin}
                                     dragHandleProps={drag.dragHandleProps}
                                     isDragging={snapshot.isDragging}
                                   />
