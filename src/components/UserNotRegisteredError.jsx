@@ -1,28 +1,86 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { base44 } from '@/api/base44Client';
+import { Building2, LogOut, KeyRound } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 const UserNotRegisteredError = () => {
+  const [mode, setMode] = useState(null); // null | 'join'
+  const [inviteCode, setInviteCode] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleJoin() {
+    if (!inviteCode.trim()) return;
+    setLoading(true);
+    setError('');
+    try {
+      const offices = await base44.entities.Office.filter({ invite_code: inviteCode.trim().toUpperCase() });
+      if (offices.length === 0) {
+        setError('Invalid invite code. Please check and try again.');
+        setLoading(false);
+        return;
+      }
+      const office = offices[0];
+      const user = await base44.auth.me();
+      const existing = await base44.entities.Membership.filter({ user_id: user.id, office_id: office.id });
+      if (existing.length === 0) {
+        await base44.entities.Membership.create({ user_id: user.id, office_id: office.id, role: 'STAFF' });
+      }
+      await base44.auth.updateMe({ active_office_id: office.id });
+      window.location.reload();
+    } catch (e) {
+      setError(e.message || 'Failed to join office.');
+      setLoading(false);
+    }
+  }
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-white to-slate-50">
-      <div className="max-w-md w-full p-8 bg-white rounded-lg shadow-lg border border-slate-100">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 p-6">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-lg border border-slate-200 p-8 space-y-6">
         <div className="text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 mb-6 rounded-full bg-orange-100">
-            <svg className="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
+          <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4">
+            <Building2 className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-4">Access Restricted</h1>
-          <p className="text-slate-600 mb-8">
-            You are not registered to use this application. Please contact the app administrator to request access.
-          </p>
-          <div className="p-4 bg-slate-50 rounded-md text-sm text-slate-600">
-            <p>If you believe this is an error, you can:</p>
-            <ul className="list-disc list-inside mt-2 space-y-1">
-              <li>Verify you are logged in with the correct account</li>
-              <li>Contact the app administrator for access</li>
-              <li>Try logging out and back in again</li>
-            </ul>
-          </div>
+          <h1 className="text-2xl font-bold text-slate-900">Assembly Bill Watch</h1>
+          <p className="text-slate-500 mt-1 text-sm">You're signed in but not yet connected to an office.</p>
         </div>
+
+        {mode === null && (
+          <div className="space-y-3">
+            <Button className="w-full" onClick={() => setMode('join')}>
+              <KeyRound className="w-4 h-4 mr-2" /> Join with Invite Code
+            </Button>
+            <Button variant="outline" className="w-full" onClick={() => base44.auth.logout(window.location.href)}>
+              <LogOut className="w-4 h-4 mr-2" /> Sign Out / Use Different Account
+            </Button>
+            <p className="text-xs text-center text-slate-400">
+              Need access? Ask your office administrator for an invite code.
+            </p>
+          </div>
+        )}
+
+        {mode === 'join' && (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Office Invite Code</label>
+              <Input
+                placeholder="Enter invite code (e.g. D2WIR7LM)"
+                value={inviteCode}
+                onChange={e => setInviteCode(e.target.value.toUpperCase())}
+                className="font-mono tracking-wider text-center text-lg"
+                maxLength={8}
+              />
+            </div>
+            {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+            <Button className="w-full" onClick={handleJoin} disabled={loading || !inviteCode.trim()}>
+              {loading ? 'Joining...' : 'Join Office'}
+            </Button>
+            <Button variant="ghost" className="w-full" onClick={() => { setMode(null); setError(''); }}>
+              Back
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
