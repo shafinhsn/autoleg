@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, Pencil, Trash2, GripVertical } from 'lucide-react';
+import { ChevronDown, ChevronRight, Pencil, Trash2, ChevronUp, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
-export default function SectionHeaderBar({ section, billCount, expanded, onToggle, onUpdate, onDelete, isAdmin, dragHandleProps }) {
+export default function SectionHeaderBar({ section, billCount, expanded, onToggle, onUpdate, onDelete, isAdmin, onMoveUp, onMoveDown, isFirst, isLast }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(section.name);
   const [color, setColor] = useState(section.color || '#1e40af');
@@ -19,14 +19,25 @@ export default function SectionHeaderBar({ section, billCount, expanded, onToggl
       style={{ backgroundColor: section.color || '#1e40af' }}
       onClick={() => !editing && onToggle()}
     >
-      {/* Drag handle — only for admins */}
+      {/* Up/Down reorder buttons — only for admins */}
       {isAdmin && (
-        <div
-          {...dragHandleProps}
-          onClick={e => e.stopPropagation()}
-          className="p-1 hover:bg-white/20 rounded cursor-grab active:cursor-grabbing flex-shrink-0"
-        >
-          <GripVertical className="w-4 h-4 opacity-70" />
+        <div className="flex gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
+          <button
+            disabled={isFirst}
+            onClick={onMoveUp}
+            className="p-1 hover:bg-white/20 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Move section up"
+          >
+            <ArrowUp className="w-3.5 h-3.5" />
+          </button>
+          <button
+            disabled={isLast}
+            onClick={onMoveDown}
+            className="p-1 hover:bg-white/20 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Move section down"
+          >
+            <ArrowDown className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 
