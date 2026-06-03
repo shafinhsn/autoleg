@@ -35,11 +35,22 @@
       "items": {
         "type": "string"
       },
-      "description": "Committees the bill is assigned to"
+      "description": "Committees the bill is assigned to (API-controlled)"
     },
     "status": {
       "type": "string",
-      "description": "Current status of the bill"
+      "description": "Legacy status field"
+    },
+    "current_procedural_status": {
+      "type": "string",
+      "description": "Where the bill currently sits procedurally \u2014 set by API sync only. E.g. 'In Senate Committee', 'On Governor Desk'"
+    },
+    "milestones": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Accumulated legislative milestones from API action history, e.g. ['Passed Assembly', 'Passed Senate']"
     },
     "pc_contact": {
       "type": "string",
@@ -106,14 +117,14 @@
       "items": {
         "type": "string"
       },
-      "description": "Custom tags/labels including priority and committees"
+      "description": "Office-controlled tags: priority labels, watchlist, internal tracking. NEVER updated by API sync."
     },
     "latest_status": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "Current status tags of the bill (array)"
+      "description": "Legacy field \u2014 kept for backwards compatibility"
     },
     "hearing_date": {
       "type": "string",

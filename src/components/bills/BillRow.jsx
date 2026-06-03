@@ -148,31 +148,13 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
     );
   }
 
-  // Normalize arrays — support both string and array
-  const rawStatuses = Array.isArray(bill.latest_status) ? bill.latest_status : (bill.latest_status ? [bill.latest_status] : []);
-
-  // Priority order: higher index = higher priority. Always display the highest-priority status.
-  const STATUS_PRIORITY_ORDER = [
-    'In Assembly Committee', 'In Senate Committee',
-    'Ordered to Third Reading', 'Advanced to Third Reading',
-    'Assembly Floor Calendar', 'Senate Floor Calendar',
-    'Substituted',
-    'Passed Senate', 'Passed Assembly',
-    'Delivered to Governor', 'Signed', 'Vetoed',
-  ];
-  function resolveDisplayStatuses(statuses) {
-    if (statuses.length <= 1) return statuses;
-    let best = null;
-    let bestRank = -1;
-    for (const s of statuses) {
-      const rank = STATUS_PRIORITY_ORDER.findIndex(p => s?.toLowerCase().includes(p.toLowerCase()));
-      if (rank > bestRank) { bestRank = rank; best = s; }
-    }
-    return best ? [best] : [statuses[0]];
-  }
-  const billStatuses = resolveDisplayStatuses(rawStatuses);
+  // Separate API-controlled fields from user-controlled tags
   const billTags = Array.isArray(bill.tags) ? bill.tags : (bill.tags ? [bill.tags] : []);
   const billCommittees = Array.isArray(bill.committee) ? bill.committee : (bill.committee ? [bill.committee] : []);
+  const billMilestones = Array.isArray(bill.milestones) ? bill.milestones : (bill.milestones ? [bill.milestones] : []);
+  // Fallback: if no new field yet, use latest_status for procedural status
+  const proceduralStatus = bill.current_procedural_status ||
+    (Array.isArray(bill.latest_status) ? bill.latest_status[0] : bill.latest_status) || null;
   
   const firstTag = billTags[0];
   const priorityColorName = priorityItems?.find(i => i.label === firstTag)?.color || DEFAULT_PRIORITY_COLORS[firstTag] || 'Purple';
@@ -220,16 +202,21 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
             onSave={v => commitEdit('committee', v)} onCancel={() => setEditingField(null)} />
         )}
       </td>
-      <td className="py-2 px-3">
-        <div ref={statusAnchorRef} onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('latest_status', ''); }} className="flex flex-wrap gap-1 cursor-pointer">
-          {billStatuses.length > 0 ? billStatuses.map(status => (
-            <ColorBadge key={status} label={status} colorName={statusItems?.find(i => i.label === status)?.color || DEFAULT_STATUS_COLORS[status] || 'Gray'} />
-          )) : <span className="text-muted-foreground/40 text-xs">—</span>}
+      <td className="py-2 px-3 min-w-[160px]">
+        <div className="flex flex-col gap-1">
+          {/* API: Current procedural status (single, read-only) */}
+          {proceduralStatus && (
+            <ColorBadge label={proceduralStatus} colorName={statusItems?.find(i => i.label === proceduralStatus)?.color || DEFAULT_STATUS_COLORS[proceduralStatus] || 'Blue'} />
+          )}
+          {/* API: Milestones (accumulated, read-only) */}
+          {billMilestones.map(m => (
+            <ColorBadge key={m} label={`✓ ${m}`} colorName="Green" />
+          ))}
+          {/* User: editable status tags */}
+          <div ref={statusAnchorRef} onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('latest_status', ''); }} className="flex flex-wrap gap-1 cursor-pointer min-h-[16px]">
+            {!proceduralStatus && billMilestones.length === 0 && <span className="text-muted-foreground/40 text-xs">—</span>}
+          </div>
         </div>
-        {editingField === 'latest_status' && (
-          <MultiSelectDropdown anchorEl={statusAnchorRef.current} currentValues={billStatuses} options={statusOptions}
-            onSave={v => commitEdit('latest_status', v)} onCancel={() => setEditingField(null)} />
-        )}
       </td>
       <td className="py-2 px-3"><EditableCell field="pc_contact" value={bill.pc_contact} /></td>
       <td className="py-2 px-3 max-w-[120px]"><EditableCell field="next_steps" value={bill.next_steps} /></td>

@@ -6,9 +6,32 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Milestones that accumulate — we look for these in action history
+const MILESTONE_TESTS = [
+    { test: (t) => t.includes('PASSED ASSEMBLY') || t.includes('RETURNED TO SENATE'), label: 'Passed Assembly' },
+    { test: (t) => t.includes('PASSED SENATE') && !t.includes('DELIVERED TO ASSEMBLY'), label: 'Passed Senate' },
+    { test: (t) => t.includes('DELIVERED TO GOV'), label: 'Delivered to Governor' },
+    { test: (t) => t.includes('SIGNED CHAP') || t.includes('APPROVED BY GOV') || t.includes('CHAPTERED'), label: 'Signed into Law' },
+    { test: (t) => t.includes('VETOED') || t.includes('POCKET VETO'), label: 'Vetoed' },
+];
+
+// Procedural status — represents where the bill currently sits (single value)
+const PROCEDURAL_STATUS_MAP = {
+    'SIGNED_BY_GOV': 'Signed into Law',
+    'VETOED': 'Vetoed',
+    'DELIVERED_TO_GOV': 'On Governor\'s Desk',
+    'PASSED_ASSEMBLY': 'Passed Assembly — Awaiting Senate',
+    'PASSED_SENATE': 'Passed Senate — Awaiting Assembly',
+    'SENATE_FLOOR': 'Senate Floor Calendar',
+    'ASSEMBLY_FLOOR': 'Assembly Floor Calendar',
+    'IN_SENATE_COMM': 'In Senate Committee',
+    'IN_ASSEMBLY_COMM': 'In Assembly Committee',
+    'SUBSTITUTED': 'Substituted',
+};
+
 /**
- * Fetch bill data from NY Senate Open Legislation API.
- * Only updates: title, latest_status, assembly_sponsor, senate_sponsor, linked_senate_bill
+ * Derive current_procedural_status and milestones from API data.
+ * NEVER touches: tags, notes, lobbyist, staff_assignees, or any user-controlled fields.
  */
 async function fetchBillFromAPI(bill, apiKey) {
     const billNum = bill.bill_number?.trim().toUpperCase();
@@ -34,80 +57,13 @@ async function fetchBillFromAPI(bill, apiKey) {
 
     const updateData = {};
 
-    // Title
-    if (result.title) {
-        updateData.title = result.title;
-    }
+    // --- Title ---
+    if (result.title) updateData.title = result.title;
 
-    // Committee — always overwrite with what the API says (replaces any manually added tags)
+    // --- Committee (API-controlled) ---
     updateData.committee = result.status?.committeeName ? [result.status.committeeName] : [];
 
-    const STATUS_TYPE_MAP = {
-        'SIGNED_BY_GOV': 'Signed',
-        'VETOED': 'Vetoed',
-        'DELIVERED_TO_GOV': 'Delivered to Governor',
-        'PASSED_ASSEMBLY': 'Passed Assembly',
-        'PASSED_SENATE': 'Passed Senate',
-        'SENATE_FLOOR': 'Senate Floor Calendar',
-        'ASSEMBLY_FLOOR': 'Assembly Floor Calendar',
-        'IN_SENATE_COMM': 'In Senate Committee',
-        'IN_ASSEMBLY_COMM': 'In Assembly Committee',
-        'SUBSTITUTED': 'Substituted',
-    };
-
-    // If this bill was substituted by a companion, follow the companion for real status
-    const substitutedBy = result.substitutedBy;
-    if (substitutedBy?.basePrintNo) {
-        const compBillNo = substitutedBy.basePrintNo;
-        const compSession = substitutedBy.session || 2025;
-        let compStatusLabel = null;
-        try {
-            const compUrl = `https://legislation.nysenate.gov/api/3/bills/${compSession}/${compBillNo}?key=${key}`;
-            const compResp = await fetch(compUrl);
-            if (compResp.ok) {
-                const compData = await compResp.json();
-                const compStatus = compData?.result?.status;
-                if (compStatus) {
-                    compStatusLabel = STATUS_TYPE_MAP[compStatus.statusType] || compStatus.statusDesc || null;
-                }
-            }
-        } catch (e) {
-            console.error(`${billNum} companion lookup failed: ${e.message}`);
-        }
-        console.log(`  ${billNum} substituted by ${compBillNo} → companion status: ${compStatusLabel}`);
-        updateData.latest_status = [compStatusLabel || 'Substituted'];
-    } else {
-        // Use action history — scan newest-first, pick highest milestone found
-        const actions = result.actions?.items || [];
-        const reversedActions = [...actions].reverse();
-        const actionPriority = [
-            { test: (t) => t.includes('SIGNED CHAP') || t.includes('APPROVED BY GOV') || t.includes('CHAPTERED'), label: 'Signed' },
-            { test: (t) => t.includes('VETOED') || t.includes('POCKET VETO'), label: 'Vetoed' },
-            { test: (t) => t.includes('DELIVERED TO GOV'), label: 'Delivered to Governor' },
-            { test: (t) => t.includes('PASSED ASSEMBLY') || t.includes('RETURNED TO SENATE'), label: 'Passed Assembly' },
-            { test: (t) => t.includes('PASSED SENATE') && !t.includes('DELIVERED TO ASSEMBLY'), label: 'Passed Senate' },
-            { test: (t) => (t.includes('ORDERED TO THIRD READING') || t.includes('ADVANCED TO THIRD READING')) && !t.includes('SUBSTITUTED'), label: 'Ordered to Third Reading' },
-        ];
-
-        let statusLabel = null;
-        for (const priority of actionPriority) {
-            const found = reversedActions.find(a => priority.test((a.text || '').toUpperCase()));
-            if (found) { statusLabel = priority.label; break; }
-        }
-
-        // Fall back to statusType map
-        if (!statusLabel) {
-            const statusType = result.status?.statusType || '';
-            const statusDesc = result.status?.statusDesc || '';
-            statusLabel = STATUS_TYPE_MAP[statusType] || statusDesc || null;
-        }
-
-        const latestAction = actions[actions.length - 1];
-        console.log(`  ${billNum} | latest action: "${latestAction?.text}" | computed: ${statusLabel}`);
-        if (statusLabel) updateData.latest_status = [statusLabel];
-    }
-
-    // Assembly sponsor
+    // --- Sponsors ---
     if (billNum.startsWith('A')) {
         const m = result.sponsor?.member;
         if (m) {
@@ -122,14 +78,13 @@ async function fetchBillFromAPI(bill, apiKey) {
         }
     }
 
-    // For Assembly bills: find Senate companion sponsor name only
+    // --- Senate companion (for Assembly bills) ---
     if (billNum.startsWith('A')) {
         try {
             const amendments = result.amendments?.items || {};
             const versionKeys = Object.keys(amendments).sort().reverse();
             let senateBillNum = null;
             let senateBillSession = null;
-
             for (const vKey of versionKeys) {
                 const sameAsItems = amendments[vKey]?.sameAs?.items || [];
                 const companion = sameAsItems.find(x => (x.basePrintNo || x.printNo || '').startsWith('S'));
@@ -139,7 +94,6 @@ async function fetchBillFromAPI(bill, apiKey) {
                     break;
                 }
             }
-
             if (senateBillNum) {
                 updateData.linked_senate_bill = senateBillNum;
                 const sUrl = `https://legislation.nysenate.gov/api/3/bills/${senateBillSession}/${senateBillNum}?key=${key}`;
@@ -158,6 +112,94 @@ async function fetchBillFromAPI(bill, apiKey) {
         }
     }
 
+    // --- Action history ---
+    const actions = result.actions?.items || [];
+    const actionTexts = actions.map(a => (a.text || '').toUpperCase());
+
+    // MILESTONES: scan full action history — accumulate all that apply
+    const foundMilestones = [];
+    for (const m of MILESTONE_TESTS) {
+        if (actionTexts.some(t => m.test(t))) {
+            foundMilestones.push(m.label);
+        }
+    }
+    updateData.milestones = foundMilestones;
+
+    // CURRENT PROCEDURAL STATUS: derive from last action + statusType
+    // If the bill was substituted, follow companion bill for real status
+    const substitutedBy = result.substitutedBy;
+    if (substitutedBy?.basePrintNo) {
+        const compBillNo = substitutedBy.basePrintNo;
+        const compSession = substitutedBy.session || 2025;
+        let compStatus = null;
+        try {
+            const compUrl = `https://legislation.nysenate.gov/api/3/bills/${compSession}/${compBillNo}?key=${key}`;
+            const compResp = await fetch(compUrl);
+            if (compResp.ok) {
+                const compData = await compResp.json();
+                const cs = compData?.result?.status;
+                if (cs) {
+                    compStatus = PROCEDURAL_STATUS_MAP[cs.statusType] || cs.statusDesc || null;
+                }
+            }
+        } catch (e) {
+            console.error(`${billNum} companion status lookup failed: ${e.message}`);
+        }
+        updateData.current_procedural_status = compStatus || 'Substituted';
+    } else {
+        // Use latest action text to determine current procedural position
+        const reversedActions = [...actions].reverse();
+
+        // Check for terminal statuses first
+        let proceduralStatus = null;
+        const proceduralChecks = [
+            { test: (t) => t.includes('SIGNED CHAP') || t.includes('APPROVED BY GOV') || t.includes('CHAPTERED'), label: 'Signed into Law' },
+            { test: (t) => t.includes('VETOED') || t.includes('POCKET VETO'), label: 'Vetoed' },
+            { test: (t) => t.includes('DELIVERED TO GOV'), label: 'On Governor\'s Desk' },
+        ];
+        for (const check of proceduralChecks) {
+            if (reversedActions.some(a => check.test((a.text || '').toUpperCase()))) {
+                proceduralStatus = check.label;
+                break;
+            }
+        }
+
+        if (!proceduralStatus) {
+            // Use the committee + statusType to determine current location
+            const statusType = result.status?.statusType || '';
+            const committeeName = result.status?.committeeName || '';
+
+            if (statusType === 'IN_SENATE_COMM' || statusType === 'SENATE_FLOOR') {
+                proceduralStatus = committeeName
+                    ? `In Senate ${committeeName} Committee`
+                    : (statusType === 'SENATE_FLOOR' ? 'Senate Floor Calendar' : 'In Senate Committee');
+            } else if (statusType === 'IN_ASSEMBLY_COMM' || statusType === 'ASSEMBLY_FLOOR') {
+                proceduralStatus = committeeName
+                    ? `In Assembly ${committeeName} Committee`
+                    : (statusType === 'ASSEMBLY_FLOOR' ? 'Assembly Floor Calendar' : 'In Assembly Committee');
+            } else if (statusType === 'PASSED_ASSEMBLY') {
+                proceduralStatus = committeeName
+                    ? `Passed Assembly — In Senate ${committeeName}`
+                    : 'Passed Assembly — Awaiting Senate Action';
+            } else if (statusType === 'PASSED_SENATE') {
+                proceduralStatus = committeeName
+                    ? `Passed Senate — In Assembly ${committeeName}`
+                    : 'Passed Senate — Awaiting Assembly Action';
+            } else {
+                proceduralStatus = PROCEDURAL_STATUS_MAP[statusType] || result.status?.statusDesc || null;
+            }
+        }
+
+        if (proceduralStatus) updateData.current_procedural_status = proceduralStatus;
+    }
+
+    // Also keep latest_status in sync for backwards compatibility
+    if (updateData.current_procedural_status) {
+        updateData.latest_status = [updateData.current_procedural_status];
+    }
+
+    console.log(`  ${billNum} | procedural: "${updateData.current_procedural_status}" | milestones: [${updateData.milestones?.join(', ')}]`);
+
     return Object.keys(updateData).length > 0 ? updateData : null;
 }
 
@@ -166,7 +208,7 @@ Deno.serve(async (req) => {
         const base44 = createClientFromRequest(req);
 
         let officeId = null;
-        let billIds = null; // optional: sync only specific bill IDs (for batching)
+        let billIds = null;
         try {
             const body = await req.clone().json();
             officeId = body?.officeId || null;
@@ -202,7 +244,22 @@ Deno.serve(async (req) => {
 
                 if (updateData) {
                     await sleep(150);
-                    await base44.asServiceRole.entities.Bill.update(bill.id, updateData);
+                    // IMPORTANT: Only write API-controlled fields. Never touch tags, lobbyist,
+                    // notes, staff_assignees, pc_contact, next_steps, session_comments, or google_drive_url.
+                    const safeUpdate = {
+                        title: updateData.title,
+                        committee: updateData.committee,
+                        assembly_sponsor: updateData.assembly_sponsor,
+                        senate_sponsor: updateData.senate_sponsor,
+                        linked_senate_bill: updateData.linked_senate_bill,
+                        current_procedural_status: updateData.current_procedural_status,
+                        milestones: updateData.milestones,
+                        latest_status: updateData.latest_status,
+                    };
+                    // Remove undefined keys so we don't accidentally null out fields
+                    Object.keys(safeUpdate).forEach(k => safeUpdate[k] === undefined && delete safeUpdate[k]);
+
+                    await base44.asServiceRole.entities.Bill.update(bill.id, safeUpdate);
                     console.log(`✓ ${bill.bill_number}`);
                     updated++;
                 } else {
