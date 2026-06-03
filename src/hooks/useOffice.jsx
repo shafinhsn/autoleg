@@ -36,7 +36,8 @@ export function OfficeProvider({ children }) {
   // staffer / editor → can edit bills but not manage settings/sections
   // viewer / user → read-only access
   const role = user?.role;
-  const isAdmin = role === 'admin' || role === 'legislative_director';
+  const isOwner = !!(office && user && office.owner_email === user.email);
+  const isAdmin = role === 'admin' || role === 'legislative_director' || isOwner;
   const isEditor = isAdmin || role === 'staffer' || role === 'editor';
   const isViewer = !isEditor; // viewer or plain 'user' role = read-only
 
