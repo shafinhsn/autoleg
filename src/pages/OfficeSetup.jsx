@@ -90,6 +90,8 @@ export default function OfficeSetup() {
     setLoadingOffices(true);
     try {
       const user = await base44.auth.me();
+      console.log('[OfficeSetup] User:', user);
+      console.log('[OfficeSetup] Active office ID:', user.active_office_id);
 
       if (user.active_office_id) {
         window.location.replace(window.location.pathname);
@@ -97,13 +99,20 @@ export default function OfficeSetup() {
       }
 
       const userMemberships = await base44.entities.Membership.filter({ user_id: user.id });
+      console.log('[OfficeSetup] Memberships found:', userMemberships.length);
+      console.log('[OfficeSetup] Memberships:', userMemberships);
+      
       const officeIds = userMemberships.map(m => m.office_id);
+      console.log('[OfficeSetup] Office IDs:', officeIds);
       
       let userOffices = [];
       if (officeIds.length > 0) {
         userOffices = await Promise.all(officeIds.map(id => base44.entities.Office.filter({ id }).then(r => r[0])));
         userOffices = userOffices.filter(Boolean);
       }
+      
+      console.log('[OfficeSetup] Offices found:', userOffices.length);
+      console.log('[OfficeSetup] Offices:', userOffices);
 
       if (userOffices.length === 1) {
         const office = userOffices[0];
@@ -119,7 +128,7 @@ export default function OfficeSetup() {
         setMode(null);
       }
     } catch (e) {
-      console.error('Auto-fix check failed:', e);
+      console.error('[OfficeSetup] Auto-fix check failed:', e);
       setMode(null);
     } finally {
       setLoadingOffices(false);
