@@ -46,7 +46,7 @@ export default function Assignments() {
   const { data: allUsers = [] } = useQuery({
     queryKey: ['all-users'],
     queryFn: () => base44.entities.User.list(),
-    enabled: memberships.length > 0,
+    enabled: !!office?.id,
   });
 
   const staff = memberships

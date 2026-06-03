@@ -26,17 +26,19 @@ export default function StaffDirectory() {
   const [inviteRole, setInviteRole] = useState('staffer');
   const [inviting, setInviting] = useState(false);
 
-  const { data: memberships = [] } = useQuery({
+  const { data: memberships = [], isLoading: membershipsLoading } = useQuery({
     queryKey: ['memberships', office?.id],
     queryFn: () => base44.entities.Membership.filter({ office_id: office?.id }),
     enabled: !!office?.id,
   });
 
-  const { data: allUsers = [], isLoading } = useQuery({
+  const { data: allUsers = [], isLoading: usersLoading } = useQuery({
     queryKey: ['all-users'],
     queryFn: () => base44.entities.User.list(),
-    enabled: memberships.length > 0,
+    enabled: !!office?.id,
   });
+
+  const isLoading = membershipsLoading || usersLoading;
 
   // Build staff list from memberships joined with user records
   const staff = memberships
