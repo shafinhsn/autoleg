@@ -1,18 +1,72 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Building2, ArrowRight, UserPlus } from 'lucide-react';
+import { Building2, ArrowRight, UserPlus, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function OfficeSetup() {
-  const [mode, setMode] = useState(null); // 'create' or 'join'
+  const [mode, setMode] = useState(null); // null | 'select' | 'create' | 'join'
+  const [offices, setOffices] = useState([]);
+  const [loadingOffices, setLoadingOffices] = useState(false);
   const [officeName, setOfficeName] = useState('');
   const [brandingColor, setBrandingColor] = useState('#1e3a5f');
   const [inviteCode, setInviteCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // On mount: check if user is owner of any office — if so, auto-fix their role and assign them
+  useEffect(() => {
+    autoFixOwnerAndLoadOffices();
+  }, []);
+
+  async function autoFixOwnerAndLoadOffices() {
+    setLoadingOffices(true);
+    try {
+      const user = await base44.auth.me();
+
+      // If user already has an office_id, they're set — reload
+      if (user.office_id) {
+        window.location.reload();
+        return;
+      }
+
+      // Find all offices where this user is the owner
+      const ownedOffices = await base44.entities.Office.filter({ owner_email: user.email });
+
+      if (ownedOffices.length === 1) {
+        // Only one owned office — auto-assign with admin role
+        await base44.auth.updateMe({ office_id: ownedOffices[0].id, role: 'admin' });
+        window.location.reload();
+        return;
+      }
+
+      if (ownedOffices.length > 1) {
+        // Multiple owned offices — let them pick
+        setOffices(ownedOffices);
+        setMode('select');
+      } else {
+        // No owned offices — show the normal create/join screen
+        setMode(null);
+      }
+    } catch (e) {
+      console.error('Auto-fix check failed:', e);
+      setMode(null);
+    }
+    setLoadingOffices(false);
+  }
+
+  async function handleSelectOffice(office) {
+    setLoading(true);
+    try {
+      await base44.auth.updateMe({ office_id: office.id, role: 'admin' });
+      window.location.reload();
+    } catch (e) {
+      setError(e.message || 'Failed to select office.');
+      setLoading(false);
+    }
+  }
 
   async function handleCreate() {
     if (!officeName.trim()) return;
@@ -20,13 +74,6 @@ export default function OfficeSetup() {
     setLoading(true);
     try {
       const user = await base44.auth.me();
-
-      // Check if user already has an office
-      if (user.office_id) {
-        setError('You already belong to an office. Please sign out and sign back in.');
-        setLoading(false);
-        return;
-      }
 
       // Check for duplicate office name
       const existing = await base44.entities.Office.filter({ name: officeName.trim() });
@@ -46,7 +93,6 @@ export default function OfficeSetup() {
 
       // Set office AND grant admin role to the creator
       await base44.auth.updateMe({ office_id: office.id, role: 'admin' });
-
       window.location.reload();
     } catch (e) {
       console.error('Error creating office:', e);
@@ -58,6 +104,7 @@ export default function OfficeSetup() {
   async function handleJoin() {
     if (!inviteCode.trim()) return;
     setLoading(true);
+    setError('');
     try {
       const offices = await base44.entities.Office.filter({ invite_code: inviteCode.trim().toUpperCase() });
       if (offices.length === 0) {
@@ -65,11 +112,7 @@ export default function OfficeSetup() {
         setError('Invalid invite code. Please check and try again.');
         return;
       }
-      const office = offices[0];
-      
-      // Update user's office assignment only (admin assigns role later)
-      await base44.auth.updateMe({ office_id: office.id });
-      
+      await base44.auth.updateMe({ office_id: offices[0].id });
       window.location.reload();
     } catch (e) {
       console.error('Error joining office:', e);
@@ -78,13 +121,17 @@ export default function OfficeSetup() {
     }
   }
 
+  if (loadingOffices) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-6">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-lg"
-      >
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-lg">
         <div className="text-center mb-10">
           <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-5">
             <Building2 className="w-8 h-8 text-primary-foreground" />
@@ -93,12 +140,37 @@ export default function OfficeSetup() {
           <p className="text-muted-foreground mt-2">Set up your legislative office to get started</p>
         </div>
 
-        {!mode && (
+        {/* SELECT existing owned offices */}
+        {mode === 'select' && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-card rounded-xl border p-8 space-y-4">
+            <h2 className="text-xl font-semibold">Select Your Office</h2>
+            <p className="text-sm text-muted-foreground">We found offices associated with your account. Select one to continue.</p>
+            {offices.map(office => (
+              <button
+                key={office.id}
+                onClick={() => handleSelectOffice(office)}
+                disabled={loading}
+                className="w-full p-4 rounded-xl border-2 border-border bg-background hover:border-primary/50 transition-all text-left flex items-center gap-4 group"
+              >
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: office.branding_color || '#1e3a5f' }}>
+                  <Building2 className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold">{office.name}</p>
+                  <p className="text-xs text-muted-foreground">Owner</p>
+                </div>
+                <CheckCircle className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+              </button>
+            ))}
+            {error && <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>}
+            <Button variant="outline" className="w-full" onClick={() => setMode(null)}>Create or Join a Different Office</Button>
+          </motion.div>
+        )}
+
+        {/* MAIN CHOICE */}
+        {mode === null && (
           <div className="space-y-4">
-            <button
-              onClick={() => setMode('create')}
-              className="w-full p-6 rounded-xl border-2 border-border bg-card hover:border-primary/50 transition-all text-left group"
-            >
+            <button onClick={() => setMode('create')} className="w-full p-6 rounded-xl border-2 border-border bg-card hover:border-primary/50 transition-all text-left group">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                   <Building2 className="w-6 h-6 text-primary" />
@@ -111,10 +183,7 @@ export default function OfficeSetup() {
               </div>
             </button>
 
-            <button
-              onClick={() => setMode('join')}
-              className="w-full p-6 rounded-xl border-2 border-border bg-card hover:border-primary/50 transition-all text-left group"
-            >
+            <button onClick={() => setMode('join')} className="w-full p-6 rounded-xl border-2 border-border bg-card hover:border-primary/50 transition-all text-left group">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center group-hover:bg-accent/20 transition-colors">
                   <UserPlus className="w-6 h-6 text-accent" />
@@ -129,33 +198,24 @@ export default function OfficeSetup() {
           </div>
         )}
 
+        {/* CREATE */}
         {mode === 'create' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-card rounded-xl border p-8 space-y-6">
             <h2 className="text-xl font-semibold">Create Your Office</h2>
             <div className="space-y-2">
               <Label>Office Name</Label>
-              <Input
-                placeholder="e.g. Office of Assemblywoman Solages"
-                value={officeName}
-                onChange={e => setOfficeName(e.target.value)}
-                className="text-base"
-              />
+              <Input placeholder="e.g. Office of Assemblywoman Solages" value={officeName}
+                onChange={e => setOfficeName(e.target.value)} className="text-base" />
             </div>
             <div className="space-y-2">
               <Label>Branding Color</Label>
               <div className="flex items-center gap-3">
-                <input
-                  type="color"
-                  value={brandingColor}
-                  onChange={e => setBrandingColor(e.target.value)}
-                  className="w-10 h-10 rounded-lg border cursor-pointer"
-                />
+                <input type="color" value={brandingColor} onChange={e => setBrandingColor(e.target.value)}
+                  className="w-10 h-10 rounded-lg border cursor-pointer" />
                 <span className="text-sm text-muted-foreground">{brandingColor}</span>
               </div>
             </div>
-            {error && (
-              <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>
-            )}
+            {error && <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>}
             <div className="flex gap-3 pt-2">
               <Button variant="outline" onClick={() => { setMode(null); setError(''); }} disabled={loading}>Back</Button>
               <Button onClick={handleCreate} disabled={loading || !officeName.trim()} className="flex-1">
@@ -165,22 +225,17 @@ export default function OfficeSetup() {
           </motion.div>
         )}
 
+        {/* JOIN */}
         {mode === 'join' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-card rounded-xl border p-8 space-y-6">
             <h2 className="text-xl font-semibold">Join an Office</h2>
             <div className="space-y-2">
               <Label>Invite Code</Label>
-              <Input
-                placeholder="Enter your invite code"
-                value={inviteCode}
+              <Input placeholder="Enter your invite code" value={inviteCode}
                 onChange={e => setInviteCode(e.target.value.toUpperCase())}
-                className="text-base font-mono tracking-wider text-center"
-                maxLength={8}
-              />
+                className="text-base font-mono tracking-wider text-center" maxLength={8} />
             </div>
-            {error && mode === 'join' && (
-              <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>
-            )}
+            {error && <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>}
             <div className="flex gap-3 pt-2">
               <Button variant="outline" onClick={() => { setMode(null); setError(''); }} disabled={loading}>Back</Button>
               <Button onClick={handleJoin} disabled={loading || !inviteCode.trim()} className="flex-1">
