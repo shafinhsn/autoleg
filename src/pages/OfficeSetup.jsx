@@ -6,6 +6,64 @@ import { Label } from '@/components/ui/label';
 import { Building2, ArrowRight, UserPlus, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
+function SelectOfficesView({ offices, onSelect, loading, error, onBack }) {
+  const [memberships, setMemberships] = useState({});
+
+  useEffect(() => {
+    loadMemberships();
+  }, [offices]);
+
+  async function loadMemberships() {
+    try {
+      const user = await base44.auth.me();
+      const membershipMap = {};
+      for (const office of offices) {
+        const mems = await base44.entities.Membership.filter({
+          user_id: user.id,
+          office_id: office.id,
+        });
+        membershipMap[office.id] = mems[0]?.role || 'MEMBER';
+      }
+      setMemberships(membershipMap);
+    } catch (e) {
+      console.error('Failed to load memberships:', e);
+    }
+  }
+
+  const roleLabels = {
+    OWNER: 'Owner',
+    ADMIN: 'Admin',
+    STAFF: 'Staff',
+    READ_ONLY: 'Viewer',
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-card rounded-xl border p-8 space-y-4">
+      <h2 className="text-xl font-semibold">Select Your Office</h2>
+      <p className="text-sm text-muted-foreground">We found offices associated with your account. Select one to continue.</p>
+      {offices.map(office => (
+        <button
+          key={office.id}
+          onClick={() => onSelect(office)}
+          disabled={loading}
+          className="w-full p-4 rounded-xl border-2 border-border bg-background hover:border-primary/50 transition-all text-left flex items-center gap-4 group"
+        >
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: office.branding_color || '#1e3a5f' }}>
+            <Building2 className="w-5 h-5 text-white" />
+          </div>
+          <div className="flex-1">
+            <p className="font-semibold">{office.name}</p>
+            <p className="text-xs text-muted-foreground">{roleLabels[memberships[office.id]] || 'Member'}</p>
+          </div>
+          <CheckCircle className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+        </button>
+      ))}
+      {error && <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>}
+      <Button variant="outline" className="w-full" onClick={onBack}>Create or Join a Different Office</Button>
+    </motion.div>
+  );
+}
+
 export default function OfficeSetup() {
   const [mode, setMode] = useState(null); // null | 'select' | 'create' | 'join'
   const [offices, setOffices] = useState([]);
@@ -32,40 +90,30 @@ export default function OfficeSetup() {
         return;
       }
 
-      // Find all offices where this user is the creator
-      const ownedOffices = await base44.entities.Office.filter({ creator_id: user.id });
+      // Find all offices where this user has a membership
+      const userMemberships = await base44.entities.Membership.filter({ user_id: user.id });
+      const officeIds = userMemberships.map(m => m.office_id);
+      
+      let userOffices = [];
+      if (officeIds.length > 0) {
+        userOffices = await Promise.all(officeIds.map(id => base44.entities.Office.filter({ id }).then(r => r[0])));
+        userOffices = userOffices.filter(Boolean);
+      }
 
-      if (ownedOffices.length === 1) {
-        // Only one owned office — ensure membership exists and auto-assign
-        const office = ownedOffices[0];
-        
-        // Check if membership exists
-        const memberships = await base44.entities.Membership.filter({
-          user_id: user.id,
-          office_id: office.id,
-        });
-        
-        if (memberships.length === 0) {
-          // Create OWNER membership
-          await base44.entities.Membership.create({
-            user_id: user.id,
-            office_id: office.id,
-            role: 'OWNER',
-          });
-        }
-        
-        // Set active office
+      if (userOffices.length === 1) {
+        // Only one office — auto-select
+        const office = userOffices[0];
         await base44.auth.updateMe({ active_office_id: office.id });
         window.location.reload();
         return;
       }
 
-      if (ownedOffices.length > 1) {
-        // Multiple owned offices — let them pick
-        setOffices(ownedOffices);
+      if (userOffices.length > 1) {
+        // Multiple offices — let them pick
+        setOffices(userOffices);
         setMode('select');
       } else {
-        // No owned offices — show the normal create/join screen
+        // No offices — show the normal create/join screen
         setMode(null);
       }
     } catch (e) {
@@ -220,32 +268,10 @@ export default function OfficeSetup() {
           <p className="text-muted-foreground mt-2">Set up your legislative office to get started</p>
         </div>
 
-        {/* SELECT existing owned offices */}
-        {mode === 'select' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-card rounded-xl border p-8 space-y-4">
-            <h2 className="text-xl font-semibold">Select Your Office</h2>
-            <p className="text-sm text-muted-foreground">We found offices associated with your account. Select one to continue.</p>
-            {offices.map(office => (
-              <button
-                key={office.id}
-                onClick={() => handleSelectOffice(office)}
-                disabled={loading}
-                className="w-full p-4 rounded-xl border-2 border-border bg-background hover:border-primary/50 transition-all text-left flex items-center gap-4 group"
-              >
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: office.branding_color || '#1e3a5f' }}>
-                  <Building2 className="w-5 h-5 text-white" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-semibold">{office.name}</p>
-                  <p className="text-xs text-muted-foreground">Owner</p>
-                </div>
-                <CheckCircle className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-              </button>
-            ))}
-            {error && <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>}
-            <Button variant="outline" className="w-full" onClick={() => setMode(null)}>Create or Join a Different Office</Button>
-          </motion.div>
-        )}
+        {/* SELECT existing offices */}
+         {mode === 'select' && (
+           <SelectOfficesView offices={offices} onSelect={handleSelectOffice} loading={loading} error={error} onBack={() => setMode(null)} />
+         )}
 
         {/* MAIN CHOICE */}
         {mode === null && (
