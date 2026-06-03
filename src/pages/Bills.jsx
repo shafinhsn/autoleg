@@ -318,7 +318,7 @@ export default function Bills() {
   }
 
   const BillTable = ({ bills: tableBills }) => (
-    <div className="overflow-x-auto">
+    <div>
       <table className="w-full text-left">
         <thead>
           <tr className="border-b border-border text-[11px] text-muted-foreground uppercase tracking-wider">
@@ -449,7 +449,8 @@ export default function Bills() {
           <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" />
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="overflow-x-auto">
+        <div className="space-y-4" style={{ minWidth: '1200px' }}>
           <DragDropContext onDragEnd={handleDragEnd}>
             <Droppable droppableId="sections">
               {provided => (
@@ -494,6 +495,7 @@ export default function Bills() {
           {filtered.length === 0 && (
             <div className="text-center py-16 text-muted-foreground">No bills found. Add a bill or import a CSV.</div>
           )}
+        </div>
         </div>
       )}
 
