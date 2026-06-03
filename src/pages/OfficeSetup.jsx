@@ -19,6 +19,15 @@ export default function OfficeSetup() {
     setError('');
     setLoading(true);
     try {
+      const user = await base44.auth.me();
+
+      // Check if user already has an office
+      if (user.office_id) {
+        setError('You already belong to an office. Please sign out and sign back in.');
+        setLoading(false);
+        return;
+      }
+
       // Check for duplicate office name
       const existing = await base44.entities.Office.filter({ name: officeName.trim() });
       if (existing.length > 0) {
@@ -26,23 +35,18 @@ export default function OfficeSetup() {
         setLoading(false);
         return;
       }
+
       const code = Math.random().toString(36).substring(2, 10).toUpperCase();
-      const user = await base44.auth.me();
       const office = await base44.entities.Office.create({
         name: officeName.trim(),
         owner_email: user.email,
         invite_code: code,
         branding_color: brandingColor,
       });
-      await base44.auth.updateMe({ office_id: office.id });
-      
-      // Create user record in staff directory (role managed separately in staff directory)
-      await base44.entities.User.create({
-        email: user.email,
-        full_name: user.full_name,
-        office_id: office.id,
-      });
-      
+
+      // Set office AND grant admin role to the creator
+      await base44.auth.updateMe({ office_id: office.id, role: 'admin' });
+
       window.location.reload();
     } catch (e) {
       console.error('Error creating office:', e);
