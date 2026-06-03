@@ -92,7 +92,7 @@ export default function OfficeSetup() {
       const user = await base44.auth.me();
 
       if (user.active_office_id) {
-        window.location.reload();
+        window.location.replace(window.location.pathname);
         return;
       }
 
@@ -108,7 +108,7 @@ export default function OfficeSetup() {
       if (userOffices.length === 1) {
         const office = userOffices[0];
         await base44.auth.updateMe({ active_office_id: office.id });
-        window.location.reload();
+        window.location.replace('/');
         return;
       }
 
