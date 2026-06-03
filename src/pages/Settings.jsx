@@ -70,52 +70,20 @@ export default function Settings() {
     if (!inviteEmail.trim()) return;
     setInviting(true);
     try {
-      // First, invite the user to the platform (creates user if doesn't exist)
-      await base44.users.inviteUser(inviteEmail.trim(), 'user');
-      
-      // Give it a moment to create the user
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Find user by email
-      const users = await base44.entities.User.filter({ email: inviteEmail.trim() });
-      
-      if (users.length === 0) {
-        alert('Failed to find user. Please try again.');
-        setInviting(false);
-        return;
-      }
-      
-      const invitedUser = users[0];
-      
-      // Check if already a member
-      const existingMembership = await base44.entities.Membership.filter({
-        user_id: invitedUser.id,
-        office_id: office.id,
+      // Send custom office invite email
+      await base44.functions.invoke('sendOfficeInviteEmail', {
+        email: inviteEmail.trim(),
+        officeName: office.name,
+        inviteCode: office.invite_code,
+        appUrl: window.location.origin,
       });
-      
-      if (existingMembership.length > 0) {
-        alert('This user is already a member of this office.');
-        setInviting(false);
-        return;
-      }
-      
-      // Create membership with selected role
-      await base44.entities.Membership.create({
-        user_id: invitedUser.id,
-        office_id: office.id,
-        role: inviteRole,
-        invited_by: user.id,
-      });
-      
-      console.log(`[Settings] Invited user ${invitedUser.email} with role ${inviteRole}`);
       
       setInviteEmail('');
       setInviteRole('STAFF');
-      refetchMemberships();
-      alert(`Successfully invited ${invitedUser.email} as ${inviteRole}`);
+      alert(`Invitation sent to ${inviteEmail}. They can join using the invite code from the email.`);
     } catch (e) {
       console.error('Invite error:', e);
-      alert('Failed to invite user: ' + e.message);
+      alert('Failed to send invitation: ' + e.message);
     }
     setInviting(false);
   }
