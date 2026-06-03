@@ -19,7 +19,7 @@ const navItems = [
 
 export default function Sidebar() {
   const location = useLocation();
-  const { office, user } = useOffice();
+  const { office, user, membershipRole } = useOffice();
 
   return (
     <aside className="fixed left-0 top-0 bottom-0 w-64 bg-sidebar text-sidebar-foreground flex flex-col z-40">
@@ -67,7 +67,7 @@ export default function Sidebar() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-xs font-medium truncate">{user?.full_name}</p>
-            <p className="text-[10px] text-sidebar-foreground/50 truncate capitalize">{user?.role || 'Staff'}</p>
+            <p className="text-[10px] text-sidebar-foreground/50 truncate capitalize">{membershipRole ? membershipRole.charAt(0) + membershipRole.slice(1).toLowerCase() : 'Staff'}</p>
           </div>
           <NotificationBell userEmail={user?.email} officeId={office?.id} />
         </div>
