@@ -70,11 +70,17 @@ export default function Settings() {
     if (!inviteEmail.trim()) return;
     setInviting(true);
     try {
+      // First, invite the user to the platform (creates user if doesn't exist)
+      await base44.users.inviteUser(inviteEmail.trim(), 'user');
+      
+      // Give it a moment to create the user
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       // Find user by email
       const users = await base44.entities.User.filter({ email: inviteEmail.trim() });
       
       if (users.length === 0) {
-        alert('User not found. Please invite them via email first from the platform.');
+        alert('Failed to find user. Please try again.');
         setInviting(false);
         return;
       }
