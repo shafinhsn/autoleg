@@ -154,6 +154,8 @@ export default function OfficeSetup() {
           user_id: user.id,
           office_id: office.id,
           role: 'OWNER',
+          full_name: user.full_name,
+          email: user.email,
         });
       }
       
@@ -192,6 +194,8 @@ export default function OfficeSetup() {
         user_id: user.id,
         office_id: office.id,
         role: 'OWNER',
+        full_name: user.full_name,
+        email: user.email,
       });
 
       await base44.auth.updateMe({ active_office_id: office.id });
@@ -234,6 +238,8 @@ export default function OfficeSetup() {
         user_id: user.id,
         office_id: office.id,
         role: 'STAFF',
+        full_name: user.full_name,
+        email: user.email,
       });
       
       await base44.auth.updateMe({ active_office_id: office.id });

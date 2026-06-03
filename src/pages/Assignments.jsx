@@ -43,15 +43,12 @@ export default function Assignments() {
     enabled: !!office?.id,
   });
 
-  const { data: allUsers = [] } = useQuery({
-    queryKey: ['all-users'],
-    queryFn: () => base44.entities.User.list(),
-    enabled: !!office?.id,
-  });
-
-  const staff = memberships
-    .map(m => allUsers.find(u => u.id === m.user_id))
-    .filter(Boolean);
+  // Build staff list directly from memberships (email/full_name cached on membership)
+  const staff = memberships.map(m => ({
+    id: m.user_id,
+    full_name: m.full_name || m.email || 'Unknown',
+    email: m.email || '',
+  }));
 
   const { data: bills = [] } = useQuery({
     queryKey: ['bills', office?.id],

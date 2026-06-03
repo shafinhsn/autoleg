@@ -26,31 +26,22 @@ export default function StaffDirectory() {
   const [inviteRole, setInviteRole] = useState('staffer');
   const [inviting, setInviting] = useState(false);
 
-  const { data: memberships = [], isLoading: membershipsLoading } = useQuery({
+  const { data: memberships = [], isLoading } = useQuery({
     queryKey: ['memberships', office?.id],
     queryFn: () => base44.entities.Membership.filter({ office_id: office?.id }),
     enabled: !!office?.id,
   });
 
-  const { data: allUsers = [], isLoading: usersLoading } = useQuery({
-    queryKey: ['all-users'],
-    queryFn: () => base44.entities.User.list(),
-    enabled: !!office?.id,
-  });
+  // Build staff list directly from memberships (email/full_name cached on membership)
+  const staff = memberships.map(m => ({
+    id: m.user_id,
+    membershipId: m.id,
+    membershipRole: m.role,
+    full_name: m.full_name || m.email || 'Unknown',
+    email: m.email || '',
+  }));
 
-  const isLoading = membershipsLoading || usersLoading;
-
-  // Build staff list from memberships joined with user records
-  const staff = memberships
-    .map(m => {
-      const u = allUsers.find(u => u.id === m.user_id);
-      if (!u) return null;
-      return { ...u, membershipRole: m.role, membershipId: m.id };
-    })
-    .filter(Boolean);
-
-  // Show pending invites (users without office_id but with is_active=false)
-  const pendingInvites = isAdmin ? allUsers.filter(u => !u.office_id && u.is_active === false && u.email) : [];
+  const pendingInvites = [];
 
   async function handleRoleChange(member, newRole) {
     await base44.entities.Membership.update(member.membershipId, { role: newRole });

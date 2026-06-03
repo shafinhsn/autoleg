@@ -25,7 +25,7 @@ const UserNotRegisteredError = () => {
       const user = await base44.auth.me();
       const existing = await base44.entities.Membership.filter({ user_id: user.id, office_id: office.id });
       if (existing.length === 0) {
-        await base44.entities.Membership.create({ user_id: user.id, office_id: office.id, role: 'STAFF' });
+        await base44.entities.Membership.create({ user_id: user.id, office_id: office.id, role: 'STAFF', full_name: user.full_name, email: user.email });
       }
       await base44.auth.updateMe({ active_office_id: office.id });
       window.location.reload();

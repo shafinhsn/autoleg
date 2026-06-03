@@ -32,14 +32,12 @@ export function OfficeProvider({ children }) {
         });
         
         if (memberships.length === 0) {
-          console.log('[useOffice] Creator without membership - auto-creating OWNER membership');
-          console.log(`[useOffice] User ID: ${user.id}`);
-          console.log(`[useOffice] Office ID: ${found.id}`);
-          
           await base44.entities.Membership.create({
             user_id: user.id,
             office_id: found.id,
             role: 'OWNER',
+            full_name: user.full_name,
+            email: user.email,
           });
           
           queryClient.invalidateQueries({ queryKey: ['my-membership'] });
