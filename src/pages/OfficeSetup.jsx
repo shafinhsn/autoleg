@@ -16,28 +16,46 @@ export default function OfficeSetup() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // On mount: check if user is owner of any office — if so, auto-fix their role and assign them
+  // On mount: check if user has memberships or is creator of any office
   useEffect(() => {
-    autoFixOwnerAndLoadOffices();
+    autoFixAndLoadOffices();
   }, []);
 
-  async function autoFixOwnerAndLoadOffices() {
+  async function autoFixAndLoadOffices() {
     setLoadingOffices(true);
     try {
       const user = await base44.auth.me();
 
-      // If user already has an office_id, they're set — reload
-      if (user.office_id) {
+      // If user already has an active_office_id, they're set — reload
+      if (user.active_office_id) {
         window.location.reload();
         return;
       }
 
-      // Find all offices where this user is the owner
-      const ownedOffices = await base44.entities.Office.filter({ owner_email: user.email });
+      // Find all offices where this user is the creator
+      const ownedOffices = await base44.entities.Office.filter({ creator_id: user.id });
 
       if (ownedOffices.length === 1) {
-        // Only one owned office — auto-assign with admin role
-        await base44.auth.updateMe({ office_id: ownedOffices[0].id, role: 'admin' });
+        // Only one owned office — ensure membership exists and auto-assign
+        const office = ownedOffices[0];
+        
+        // Check if membership exists
+        const memberships = await base44.entities.Membership.filter({
+          user_id: user.id,
+          office_id: office.id,
+        });
+        
+        if (memberships.length === 0) {
+          // Create OWNER membership
+          await base44.entities.Membership.create({
+            user_id: user.id,
+            office_id: office.id,
+            role: 'OWNER',
+          });
+        }
+        
+        // Set active office
+        await base44.auth.updateMe({ active_office_id: office.id });
         window.location.reload();
         return;
       }
@@ -60,7 +78,23 @@ export default function OfficeSetup() {
   async function handleSelectOffice(office) {
     setLoading(true);
     try {
-      await base44.auth.updateMe({ office_id: office.id, role: 'admin' });
+      const user = await base44.auth.me();
+      
+      // Ensure membership exists
+      const memberships = await base44.entities.Membership.filter({
+        user_id: user.id,
+        office_id: office.id,
+      });
+      
+      if (memberships.length === 0) {
+        await base44.entities.Membership.create({
+          user_id: user.id,
+          office_id: office.id,
+          role: 'OWNER',
+        });
+      }
+      
+      await base44.auth.updateMe({ active_office_id: office.id });
       window.location.reload();
     } catch (e) {
       setError(e.message || 'Failed to select office.');
@@ -84,15 +118,32 @@ export default function OfficeSetup() {
       }
 
       const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+      
+      // Requirement 2: Create office with creator_id
       const office = await base44.entities.Office.create({
         name: officeName.trim(),
-        owner_email: user.email,
+        creator_id: user.id,
         invite_code: code,
         branding_color: brandingColor,
       });
 
-      // Set office AND grant admin role to the creator
-      await base44.auth.updateMe({ office_id: office.id, role: 'admin' });
+      console.log('[OfficeSetup] Office created:', office.id);
+      console.log('[OfficeSetup] Creator ID:', user.id);
+
+      // Requirement 2: Automatically create membership record for creator with OWNER role
+      const membership = await base44.entities.Membership.create({
+        user_id: user.id,
+        office_id: office.id,
+        role: 'OWNER',
+      });
+
+      console.log('[OfficeSetup] Membership created:', membership.id, 'Role: OWNER');
+
+      // Requirement 2: Set the newly created office as the user's active office
+      await base44.auth.updateMe({ active_office_id: office.id });
+      
+      console.log('[OfficeSetup] User active_office_id set to:', office.id);
+      
       window.location.reload();
     } catch (e) {
       console.error('Error creating office:', e);
@@ -106,13 +157,42 @@ export default function OfficeSetup() {
     setLoading(true);
     setError('');
     try {
+      const user = await base44.auth.me();
       const offices = await base44.entities.Office.filter({ invite_code: inviteCode.trim().toUpperCase() });
+      
       if (offices.length === 0) {
         setLoading(false);
         setError('Invalid invite code. Please check and try again.');
         return;
       }
-      await base44.auth.updateMe({ office_id: offices[0].id });
+      
+      const office = offices[0];
+      
+      // Requirement 4: Check if already a member
+      const existingMembership = await base44.entities.Membership.filter({
+        user_id: user.id,
+        office_id: office.id,
+      });
+      
+      if (existingMembership.length > 0) {
+        setError('You are already a member of this office.');
+        setLoading(false);
+        return;
+      }
+      
+      // Requirement 4: Joining creates a membership record with role assigned by invitation
+      // For invite code joining, default to STAFF role (can be customized later)
+      await base44.entities.Membership.create({
+        user_id: user.id,
+        office_id: office.id,
+        role: 'STAFF',
+      });
+      
+      console.log('[OfficeSetup] User joined office via invite code:', office.id);
+      console.log('[OfficeSetup] Membership created with role: STAFF');
+      
+      // Set active office
+      await base44.auth.updateMe({ active_office_id: office.id });
       window.location.reload();
     } catch (e) {
       console.error('Error joining office:', e);

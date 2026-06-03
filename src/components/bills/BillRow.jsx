@@ -141,7 +141,7 @@ function MultiSelectDropdown({ anchorEl, currentValues, options, onSave, onCance
   );
 }
 
-export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, onToggleSelect, priorityItems, statusItems, committeeItems, uniqueStatuses, uniqueCommittees }) {
+export default function BillRow({ bill, onUpdate, onDelete, isAdmin, isEditor, selected, onToggleSelect, priorityItems, statusItems, committeeItems, uniqueStatuses, uniqueCommittees }) {
   const [editingField, setEditingField] = useState(null);
   const [editValue, setEditValue] = useState('');
   const tagsAnchorRef = useRef(null);
@@ -166,8 +166,8 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
       );
     }
     return (
-      <span onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit(field, value); }}
-        className={`cursor-text hover:bg-muted/50 rounded px-1 -mx-1 text-xs ${!isAdmin ? 'cursor-default' : ''}`} title={isAdmin ? "Click to edit" : ""}>
+      <span onClick={e => { if (!isEditor) return; e.preventDefault(); e.stopPropagation(); startEdit(field, value); }}
+        className={`cursor-text hover:bg-muted/50 rounded px-1 -mx-1 text-xs ${!isEditor ? 'cursor-default' : ''}`} title={isEditor ? "Click to edit" : ""}>
         {value || <span className="text-muted-foreground/40">—</span>}
       </span>
     );
@@ -198,7 +198,7 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
         {bill.is_caucus_bill && <span className="ml-1 text-[9px] bg-accent/20 text-accent px-1 rounded font-medium">C</span>}
       </td>
       <td className="py-2 px-3">
-        <div ref={tagsAnchorRef} onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('tags', billTags); }} className="flex flex-wrap gap-1 cursor-pointer">
+        <div ref={tagsAnchorRef} onClick={e => { if (!isEditor) return; e.preventDefault(); e.stopPropagation(); startEdit('tags', billTags); }} className="flex flex-wrap gap-1 cursor-pointer">
           {billTags.length > 0 ? billTags.map(tag => (
             <ColorBadge key={tag} label={tag} colorName={priorityItems?.find(i => i.label === tag)?.color || DEFAULT_PRIORITY_COLORS[tag] || 'Purple'} />
           )) : <span className="text-muted-foreground/40 text-xs">—</span>}
@@ -217,7 +217,7 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
       <td className="py-2 px-3 max-w-[100px]"><EditableCell field="short_name" value={bill.short_name} /></td>
       <td className="py-2 px-3 whitespace-nowrap"><EditableCell field="senate_sponsor" value={bill.senate_sponsor} /></td>
       <td className="py-2 px-3">
-        <div ref={committeeAnchorRef} onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('committee', bill.committee); }} className="flex flex-wrap gap-1 cursor-pointer">
+        <div ref={committeeAnchorRef} onClick={e => { if (!isEditor) return; e.preventDefault(); e.stopPropagation(); startEdit('committee', bill.committee); }} className="flex flex-wrap gap-1 cursor-pointer">
           {billCommittees.length > 0 ? billCommittees.map(comm => (
             <span key={comm} className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border bg-sky-100 text-sky-700 border-sky-200`}>{comm}</span>
           )) : <span className="text-muted-foreground/40 text-xs">—</span>}
@@ -240,7 +240,7 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
           {/* User-controlled: custom status notes (editable, never overwritten by API) */}
           <div
             ref={statusAnchorRef}
-            onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('status_notes', bill.status_notes || []); }}
+            onClick={e => { if (!isEditor) return; e.preventDefault(); e.stopPropagation(); startEdit('status_notes', bill.status_notes || []); }}
             className="flex flex-wrap gap-1 cursor-pointer min-h-[18px]"
           >
             {(bill.status_notes || []).map(note => (
@@ -248,7 +248,7 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
                 {note}
               </span>
             ))}
-            {isAdmin && (!bill.status_notes || bill.status_notes.length === 0) && (
+            {isEditor && (!bill.status_notes || bill.status_notes.length === 0) && (
               <span className="text-muted-foreground/30 text-[10px] italic">+ add note</span>
             )}
             {!proceduralStatus && billMilestones.length === 0 && (!bill.status_notes || bill.status_notes.length === 0) && (
@@ -287,14 +287,14 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
               className="text-xs text-primary hover:underline truncate max-w-[100px]" title={bill.google_drive_url}>
               Drive
             </a>
-            {isAdmin && (
+            {isEditor && (
               <span onClick={e => { e.preventDefault(); e.stopPropagation(); startEdit('google_drive_url', bill.google_drive_url); }}
                 className="text-muted-foreground/40 hover:text-muted-foreground cursor-pointer text-[10px]">✎</span>
             )}
           </div>
         ) : (
-          <span onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('google_drive_url', ''); }}
-            className={`text-muted-foreground/40 text-xs ${isAdmin ? 'cursor-text hover:text-muted-foreground' : ''}`}>—</span>
+          <span onClick={e => { if (!isEditor) return; e.preventDefault(); e.stopPropagation(); startEdit('google_drive_url', ''); }}
+            className={`text-muted-foreground/40 text-xs ${isEditor ? 'cursor-text hover:text-muted-foreground' : ''}`}>—</span>
         )}
       </td>
       <td className="py-2 px-3 text-center">

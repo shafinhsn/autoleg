@@ -2,28 +2,10 @@
   "name": "User",
   "type": "object",
   "properties": {
-    "role": {
+    "active_office_id": {
       "type": "string",
-      "enum": [
-        "admin",
-        "legislative_director",
-        "staffer",
-        "intern",
-        "user"
-      ],
-      "default": "user"
-    },
-    "office_id": {
-      "type": "string",
-      "description": "ID of the office this user belongs to"
-    },
-    "title": {
-      "type": "string",
-      "description": "Job title"
-    },
-    "is_active": {
-      "type": "boolean",
-      "default": true
+      "description": "The ID of the office the user is currently active in"
     }
-  }
+  },
+  "required": []
 }

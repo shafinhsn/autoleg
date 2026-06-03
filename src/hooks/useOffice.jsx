@@ -1,6 +1,6 @@
 import { useState, useEffect, createContext, useContext } from 'react';
 import { base44 } from '@/api/base44Client';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 const OfficeContext = createContext(null);
 
@@ -15,42 +15,90 @@ export function OfficeProvider({ children }) {
     }).catch(() => setLoading(false));
   }, []);
 
+  const queryClient = useQueryClient();
+
   const { data: office, isLoading: officeLoading, refetch: refetchOffice } = useQuery({
-    queryKey: ['my-office', user?.office_id],
+    queryKey: ['my-office', user?.active_office_id],
     queryFn: async () => {
-      if (!user?.office_id) return null;
-      const offices = await base44.entities.Office.filter({ id: user.office_id });
+      if (!user?.active_office_id) return null;
+      const offices = await base44.entities.Office.filter({ id: user.active_office_id });
       const found = offices[0] || null;
-      // Auto-fix: if this user is the office owner but doesn't have admin role, grant it now
-      if (found && found.owner_email === user.email && user.role !== 'admin' && user.role !== 'legislative_director') {
-        await base44.auth.updateMe({ role: 'admin' });
-        window.location.reload();
+      
+      // Requirement 6: Ensure office creator never loses access
+      if (found && found.creator_id === user.id) {
+        const memberships = await base44.entities.Membership.filter({ 
+          user_id: user.id, 
+          office_id: found.id 
+        });
+        
+        if (memberships.length === 0) {
+          console.log('[useOffice] Creator without membership - auto-creating OWNER membership');
+          console.log(`[useOffice] User ID: ${user.id}`);
+          console.log(`[useOffice] Office ID: ${found.id}`);
+          
+          await base44.entities.Membership.create({
+            user_id: user.id,
+            office_id: found.id,
+            role: 'OWNER',
+          });
+          
+          queryClient.invalidateQueries({ queryKey: ['my-membership'] });
+        }
       }
+      
       return found;
     },
-    enabled: !!user?.office_id,
+    enabled: !!user?.active_office_id,
   });
 
-  // Role hierarchy:
-  // admin / legislative_director → full admin (can edit, delete, manage settings)
-  // staffer / editor → can edit bills but not manage settings/sections
-  // viewer / user → read-only access
-  const role = user?.role;
-  const isOwner = !!(office && user && office.owner_email === user.email);
-  const isAdmin = role === 'admin' || role === 'legislative_director' || isOwner;
-  const isEditor = isAdmin || role === 'staffer' || role === 'editor';
-  const isViewer = !isEditor; // viewer or plain 'user' role = read-only
+  const { data: membership, isLoading: membershipLoading } = useQuery({
+    queryKey: ['my-membership', user?.id, office?.id],
+    queryFn: async () => {
+      if (!user?.id || !office?.id) return null;
+      const memberships = await base44.entities.Membership.filter({
+        user_id: user.id,
+        office_id: office.id,
+      });
+      return memberships[0] || null;
+    },
+    enabled: !!user?.id && !!office?.id,
+  });
+
+  // Debugging logs (Requirement 7)
+  useEffect(() => {
+    if (user && office && membership) {
+      console.log('[useOffice] Permission Check:');
+      console.log(`  User ID: ${user.id}`);
+      console.log(`  Office ID: ${office.id}`);
+      console.log(`  Membership Role: ${membership.role}`);
+      console.log(`  Is Owner: ${membership.role === 'OWNER'}`);
+      console.log(`  Is Admin: ${membership.role === 'OWNER' || membership.role === 'ADMIN'}`);
+      console.log(`  Is Staff: ${membership.role === 'STAFF'}`);
+      console.log(`  Is Read Only: ${membership.role === 'READ_ONLY'}`);
+    }
+  }, [user, office, membership]);
+
+  // Role-based permissions
+  const membershipRole = membership?.role;
+  const isOwner = membershipRole === 'OWNER';
+  const isAdmin = membershipRole === 'OWNER' || membershipRole === 'ADMIN';
+  const isStaff = membershipRole === 'STAFF';
+  const isReadOnly = membershipRole === 'READ_ONLY' || !membershipRole;
+  const isEditor = isAdmin || isStaff;
 
   const value = {
     user,
     office,
-    loading: loading || (!!user?.office_id && officeLoading),
+    membership,
+    loading: loading || (!!user?.active_office_id && (officeLoading || membershipLoading)),
     refetchOffice,
+    isOwner,
     isAdmin,
+    isStaff,
+    isReadOnly,
     isEditor,
-    isViewer,
-    isStaff: role === 'staffer' || role === 'user',
-    needsSetup: !loading && !!user && !user.office_id,
+    membershipRole,
+    needsSetup: !loading && !!user && !user.active_office_id,
   };
 
   return (

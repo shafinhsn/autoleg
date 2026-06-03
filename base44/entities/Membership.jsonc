@@ -1,0 +1,34 @@
+{
+  "name": "Membership",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "description": "ID of the user"
+    },
+    "office_id": {
+      "type": "string",
+      "description": "ID of the office"
+    },
+    "role": {
+      "type": "string",
+      "enum": [
+        "OWNER",
+        "ADMIN",
+        "STAFF",
+        "READ_ONLY"
+      ],
+      "default": "READ_ONLY",
+      "description": "Role of the user within this office"
+    },
+    "invited_by": {
+      "type": "string",
+      "description": "ID of the user who invited this member"
+    }
+  },
+  "required": [
+    "user_id",
+    "office_id",
+    "role"
+  ]
+}

@@ -13,7 +13,7 @@ import { Link } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 export default function Bills() {
-  const { office, isAdmin } = useOffice();
+  const { office, isOwner, isAdmin, isEditor } = useOffice();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -384,7 +384,7 @@ export default function Bills() {
               <Plus className="w-4 h-4 mr-1.5" /> Section
             </Button>
           )}
-          <Button size="sm" onClick={() => setShowAddForm(!showAddForm)} disabled={!isAdmin}>
+          <Button size="sm" onClick={() => setShowAddForm(!showAddForm)} disabled={!isEditor}>
             <Plus className="w-4 h-4 mr-1.5" /> Add Bill
           </Button>
         </div>
@@ -471,7 +471,7 @@ export default function Bills() {
                               {expandedSections.has(section.id) && sectionBills.map(bill => (
                                 <BillRow
                                   key={bill.id} bill={bill}
-                                  onUpdate={handleUpdateBill} onDelete={handleDeleteBill} isAdmin={isAdmin}
+                                  onUpdate={handleUpdateBill} onDelete={handleDeleteBill} isEditor={isEditor}
                                   selected={selectedBills.has(bill.id)}
                                   onToggleSelect={() => setSelectedBills(prev => { const n = new Set(prev); n.has(bill.id) ? n.delete(bill.id) : n.add(bill.id); return n; })}
                                   priorityItems={priorityItems} statusItems={statusItems}
@@ -494,7 +494,7 @@ export default function Bills() {
                           {unsectionedBills.map(bill => (
                             <BillRow
                               key={bill.id} bill={bill}
-                              onUpdate={handleUpdateBill} onDelete={handleDeleteBill} isAdmin={isAdmin}
+                              onUpdate={handleUpdateBill} onDelete={handleDeleteBill} isEditor={isEditor}
                               selected={selectedBills.has(bill.id)}
                               onToggleSelect={() => setSelectedBills(prev => { const n = new Set(prev); n.has(bill.id) ? n.delete(bill.id) : n.add(bill.id); return n; })}
                               priorityItems={priorityItems} statusItems={statusItems}

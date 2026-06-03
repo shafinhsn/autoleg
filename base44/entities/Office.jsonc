@@ -6,9 +6,9 @@
       "type": "string",
       "description": "Office name, e.g. Office of Assemblywoman Solages"
     },
-    "owner_email": {
+    "creator_id": {
       "type": "string",
-      "description": "Email of the admin who created the office"
+      "description": "ID of the user who created this office"
     },
     "invite_code": {
       "type": "string",
@@ -26,7 +26,7 @@
   },
   "required": [
     "name",
-    "owner_email",
+    "creator_id",
     "invite_code"
   ]
 }
