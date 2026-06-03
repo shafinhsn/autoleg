@@ -209,22 +209,6 @@ function ConfigTab({ configType, defaultItems, description }) {
 }
 
 export default function Customize() {
-  const { isAdmin } = useOffice();
-  
-  if (!isAdmin) {
-    return (
-      <div className="space-y-6 max-w-3xl">
-        <div>
-          <h1 className="text-2xl font-bold">Customize Tracker</h1>
-          <p className="text-muted-foreground text-sm mt-1">Only Owners and Admins can customize tracker settings.</p>
-        </div>
-        <div className="p-8 border rounded-xl text-center text-muted-foreground">
-          You don't have permission to customize tracker settings.
-        </div>
-      </div>
-    );
-  }
-  
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
