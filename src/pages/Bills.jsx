@@ -402,47 +402,49 @@ export default function Bills() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">No bills found. Add a bill or import a CSV.</div>
       ) : (
-        <div className="bg-card rounded-xl border overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left" style={{ minWidth: '1200px' }}>
-              <thead>
-                <tr className="border-b border-border text-[11px] text-muted-foreground uppercase tracking-wider bg-muted/40">
-                  <th className="py-2 px-3 w-8">
-                    <input type="checkbox"
-                      checked={filtered.length > 0 && filtered.every(b => selectedBills.has(b.id))}
-                      onChange={() => toggleSelectAll(filtered)} className="rounded" />
-                  </th>
-                  <th className="py-2 px-3 font-medium">Bill No.</th>
-                  <th className="py-2 px-3 font-medium">Priority</th>
-                  <th className="py-2 px-3 font-medium">85</th>
-                  <th className="py-2 px-3 font-medium">Title</th>
-                  <th className="py-2 px-3 font-medium">Short Name</th>
-                  <th className="py-2 px-3 font-medium">Senate Sponsor</th>
-                  <th className="py-2 px-3 font-medium">Committee</th>
-                  <th className="py-2 px-3 font-medium">Status</th>
-                  <th className="py-2 px-3 font-medium">P&amp;C Contact</th>
-                  <th className="py-2 px-3 font-medium">Next Steps</th>
-                  <th className="py-2 px-3 font-medium">Session Comments</th>
-                  <th className="py-2 px-3 font-medium">Lobbyist</th>
-                  <th className="py-2 px-3 font-medium">Drive Link</th>
-                  <th className="py-2 px-3 font-medium">Caucus</th>
-                  <th className="py-2 px-3 w-10"></th>
-                </tr>
-              </thead>
-              <tbody>
-                <DragDropContext onDragEnd={handleDragEnd}>
-                  <Droppable droppableId="sections">
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <div className="bg-card rounded-xl border overflow-hidden flex flex-col" style={{ height: 'calc(100vh - 220px)' }}>
+            {/* Sticky column headers */}
+            <div className="overflow-x-auto flex-shrink-0 border-b border-border bg-muted/40">
+              <table className="w-full text-left" style={{ minWidth: '1400px' }}>
+                <thead>
+                  <tr className="text-[11px] text-muted-foreground uppercase tracking-wider">
+                    <th className="py-2 px-3 w-8">
+                      <input type="checkbox"
+                        checked={filtered.length > 0 && filtered.every(b => selectedBills.has(b.id))}
+                        onChange={() => toggleSelectAll(filtered)} className="rounded" />
+                    </th>
+                    <th className="py-2 px-3 font-medium">Bill No.</th>
+                    <th className="py-2 px-3 font-medium">Priority</th>
+                    <th className="py-2 px-3 font-medium">85</th>
+                    <th className="py-2 px-3 font-medium">Title</th>
+                    <th className="py-2 px-3 font-medium">Short Name</th>
+                    <th className="py-2 px-3 font-medium">Senate Sponsor</th>
+                    <th className="py-2 px-3 font-medium">Committee</th>
+                    <th className="py-2 px-3 font-medium">Status</th>
+                    <th className="py-2 px-3 font-medium">P&amp;C Contact</th>
+                    <th className="py-2 px-3 font-medium">Next Steps</th>
+                    <th className="py-2 px-3 font-medium">Session Comments</th>
+                    <th className="py-2 px-3 font-medium">Lobbyist</th>
+                    <th className="py-2 px-3 font-medium">Drive Link</th>
+                    <th className="py-2 px-3 font-medium">Caucus</th>
+                    <th className="py-2 px-3 w-10"></th>
+                  </tr>
+                </thead>
+              </table>
+            </div>
+            {/* Scrollable body — scrollbar always visible at bottom of this container */}
+            <div className="overflow-auto flex-1">
+              <table className="w-full text-left" style={{ minWidth: '1400px' }}>
+                <tbody>
+                  <Droppable droppableId="sections" type="section">
                     {provided => (
                       <tr style={{ display: 'contents' }} ref={provided.innerRef} {...provided.droppableProps}>
                         {sectionedBills.map(({ section, bills: sectionBills }, index) => (
                           <Draggable key={section.id} draggableId={section.id} index={index} isDragDisabled={!isAdmin}>
                             {(drag, snapshot) => (
-                              <>
-                                <tr
-                                  ref={drag.innerRef}
-                                  {...drag.draggableProps}
-                                  className={snapshot.isDragging ? 'opacity-50' : ''}
-                                >
+                              <tr style={{ display: 'contents' }} ref={drag.innerRef} {...drag.draggableProps}>
+                                <tr className={snapshot.isDragging ? 'opacity-60' : ''}>
                                   <td colSpan={16} className="p-0">
                                     <SectionHeaderBar
                                       section={section} billCount={sectionBills.length}
@@ -460,21 +462,15 @@ export default function Bills() {
                                 )}
                                 {expandedSections.has(section.id) && sectionBills.map(bill => (
                                   <BillRow
-                                    key={bill.id}
-                                    bill={bill}
-                                    onUpdate={handleUpdateBill}
-                                    onDelete={handleDeleteBill}
-                                    isAdmin={isAdmin}
+                                    key={bill.id} bill={bill}
+                                    onUpdate={handleUpdateBill} onDelete={handleDeleteBill} isAdmin={isAdmin}
                                     selected={selectedBills.has(bill.id)}
                                     onToggleSelect={() => setSelectedBills(prev => { const n = new Set(prev); n.has(bill.id) ? n.delete(bill.id) : n.add(bill.id); return n; })}
-                                    priorityItems={priorityItems}
-                                    statusItems={statusItems}
-                                    committeeItems={committeeItems}
-                                    uniqueStatuses={uniqueStatuses}
-                                    uniqueCommittees={uniqueCommittees}
+                                    priorityItems={priorityItems} statusItems={statusItems}
+                                    committeeItems={committeeItems} uniqueStatuses={uniqueStatuses} uniqueCommittees={uniqueCommittees}
                                   />
                                 ))}
-                              </>
+                              </tr>
                             )}
                           </Draggable>
                         ))}
@@ -482,37 +478,31 @@ export default function Bills() {
                       </tr>
                     )}
                   </Droppable>
-                </DragDropContext>
-                {unsectionedBills.length > 0 && (
-                  <>
-                    <tr>
-                      <td colSpan={16} className="px-4 py-2 bg-muted/30 border-y border-border">
-                        <span className="font-semibold text-sm">Uncategorized</span>
-                        <span className="ml-2 text-xs text-muted-foreground">{unsectionedBills.length} bills</span>
-                      </td>
-                    </tr>
-                    {unsectionedBills.map(bill => (
-                      <BillRow
-                        key={bill.id}
-                        bill={bill}
-                        onUpdate={handleUpdateBill}
-                        onDelete={handleDeleteBill}
-                        isAdmin={isAdmin}
-                        selected={selectedBills.has(bill.id)}
-                        onToggleSelect={() => setSelectedBills(prev => { const n = new Set(prev); n.has(bill.id) ? n.delete(bill.id) : n.add(bill.id); return n; })}
-                        priorityItems={priorityItems}
-                        statusItems={statusItems}
-                        committeeItems={committeeItems}
-                        uniqueStatuses={uniqueStatuses}
-                        uniqueCommittees={uniqueCommittees}
-                      />
-                    ))}
-                  </>
-                )}
-              </tbody>
-            </table>
+                  {unsectionedBills.length > 0 && (
+                    <>
+                      <tr>
+                        <td colSpan={16} className="px-4 py-2 bg-muted/30 border-y border-border">
+                          <span className="font-semibold text-sm">Uncategorized</span>
+                          <span className="ml-2 text-xs text-muted-foreground">{unsectionedBills.length} bills</span>
+                        </td>
+                      </tr>
+                      {unsectionedBills.map(bill => (
+                        <BillRow
+                          key={bill.id} bill={bill}
+                          onUpdate={handleUpdateBill} onDelete={handleDeleteBill} isAdmin={isAdmin}
+                          selected={selectedBills.has(bill.id)}
+                          onToggleSelect={() => setSelectedBills(prev => { const n = new Set(prev); n.has(bill.id) ? n.delete(bill.id) : n.add(bill.id); return n; })}
+                          priorityItems={priorityItems} statusItems={statusItems}
+                          committeeItems={committeeItems} uniqueStatuses={uniqueStatuses} uniqueCommittees={uniqueCommittees}
+                        />
+                      ))}
+                    </>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        </DragDropContext>
       )}
 
       {filtered.length > 0 && (
