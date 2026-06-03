@@ -53,12 +53,12 @@ export default function MultiTagSelect({ tags = [], onChange, className = '' }) 
         </button>
       </div>
       {open && available.length > 0 && (
-        <div className="absolute z-50 top-full left-0 mt-0.5 w-40 bg-popover border rounded-md shadow-md py-1 max-h-40 overflow-y-auto">
+        <div className="absolute z-50 top-full left-0 mt-0.5 bg-popover border rounded-md shadow-md py-1 max-h-40 overflow-y-auto w-max max-w-xs">
           {available.map(tag => (
             <button
               key={tag}
               onClick={() => { addTag(tag); setOpen(false); }}
-              className="w-full text-left px-2.5 py-1 text-[11px] hover:bg-muted transition-colors truncate"
+              className="text-left px-2.5 py-1 text-[11px] hover:bg-muted transition-colors whitespace-nowrap"
             >
               {tag}
             </button>
