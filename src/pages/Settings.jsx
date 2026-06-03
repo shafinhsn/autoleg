@@ -408,9 +408,12 @@ export default function Settings() {
           <CardTitle className="text-base flex items-center gap-2"><LogOut className="w-4 h-4" /> Switch Office</CardTitle>
           <CardDescription>Leave this office and join or create a different one</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           <Button variant="outline" className="w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground" onClick={handleLeaveOffice}>
             Leave This Office
+          </Button>
+          <Button variant="outline" className="w-full" onClick={() => base44.auth.logout()}>
+            Log Out (Switch Account)
           </Button>
         </CardContent>
       </Card>
