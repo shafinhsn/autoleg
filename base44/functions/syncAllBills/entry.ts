@@ -42,55 +42,48 @@ async function fetchBillFromAPI(bill, apiKey) {
     // Committee — always overwrite with what the API says (replaces any manually added tags)
     updateData.committee = result.status?.committeeName ? [result.status.committeeName] : [];
 
-    // Status resolution — priority order (highest wins):
-    // 1. statusType from the API's current status object (most authoritative)
-    // 2. Action history scan (for statuses like "Ordered to Third Reading" not in statusType)
     const statusType = result.status?.statusType || '';
     const statusDesc = result.status?.statusDesc || '';
 
-    // Direct statusType → label map (these are definitive — trust them over action history)
-    const typeMap = {
-        'SIGNED_BY_GOV': 'Signed',
-        'VETOED': 'Vetoed',
-        'DELIVERED_TO_GOV': 'Delivered to Governor',
-        'PASSED_ASSEMBLY': 'Passed Assembly',
-        'PASSED_SENATE': 'Passed Senate',
-        'SENATE_FLOOR': 'Senate Floor Calendar',
-        'ASSEMBLY_FLOOR': 'Assembly Floor Calendar',
-        'IN_SENATE_COMM': 'In Senate Committee',
-        'IN_ASSEMBLY_COMM': 'In Assembly Committee',
-        // SUBSTITUTED is intentionally omitted — a substituted bill may have already passed
-    };
+    // Action history is the most reliable source — scan ALL actions newest-first
+    // and pick the highest-priority milestone that has actually occurred.
+    const actions = result.actions?.items || [];
+    const reversedActions = [...actions].reverse();
 
-    // Use statusType first if it's a definitive high-confidence status
-    let statusLabel = typeMap[statusType] || null;
+    // Priority order top-to-bottom: first match wins
+    const actionPriority = [
+        { test: (t) => t.includes('SIGNED') || t.includes('CHAPTERED'), label: 'Signed' },
+        { test: (t) => t.includes('VETOED') || t.includes('POCKET VETO'), label: 'Vetoed' },
+        { test: (t) => t.includes('DELIVERED TO GOV'), label: 'Delivered to Governor' },
+        { test: (t) => t.includes('RETURNED TO SENATE') || t.includes('PASSED ASSEMBLY'), label: 'Passed Assembly' },
+        { test: (t) => t.includes('PASSED SENATE'), label: 'Passed Senate' },
+        { test: (t) => t.includes('SUBSTITUTED'), label: 'Substituted' },
+        { test: (t) => t.includes('ORDERED TO THIRD READING') || t.includes('ADVANCED TO THIRD READING') || t.includes('THIRD READING CAL'), label: 'Ordered to Third Reading' },
+    ];
 
-    // If statusType isn't in our map (e.g. SUBSTITUTED, or something unknown),
-    // scan action history from most-recent to oldest to find the best status
-    if (!statusLabel) {
-        const actions = result.actions?.items || [];
-        // Scan in reverse (newest action first) so the most recent event wins
-        const reversedActions = [...actions].reverse();
-
-        // Priority order: highest-priority match wins
-        const actionPriority = [
-            { test: (t) => t.includes('SIGNED') || t.includes('CHAPTERED'), label: 'Signed' },
-            { test: (t) => t.includes('VETOED') || t.includes('POCKET VETO'), label: 'Vetoed' },
-            { test: (t) => t.includes('DELIVERED TO GOV'), label: 'Delivered to Governor' },
-            { test: (t) => t.includes('RETURNED TO SENATE') || t.includes('PASSED ASSEMBLY'), label: 'Passed Assembly' },
-            { test: (t) => t.includes('PASSED SENATE'), label: 'Passed Senate' },
-            { test: (t) => t.includes('SUBSTITUTED'), label: 'Substituted' },
-            { test: (t) => t.includes('ORDERED TO THIRD READING') || t.includes('ADVANCED TO THIRD READING') || t.includes('THIRD READING CAL'), label: 'Ordered to Third Reading' },
-        ];
-
-        // Walk priority list top-down; for each priority level, check if ANY action (newest first) matches
-        for (const priority of actionPriority) {
-            const found = reversedActions.find(a => priority.test((a.text || '').toUpperCase()));
-            if (found) { statusLabel = priority.label; break; }
-        }
+    let statusLabel = null;
+    for (const priority of actionPriority) {
+        // Check if this milestone ever occurred (any action in history matches)
+        const found = reversedActions.find(a => priority.test((a.text || '').toUpperCase()));
+        if (found) { statusLabel = priority.label; break; }
     }
 
-    if (!statusLabel) statusLabel = statusDesc || null;
+    // Fall back to statusType map only if no action history match
+    if (!statusLabel) {
+        const typeMap = {
+            'SIGNED_BY_GOV': 'Signed',
+            'VETOED': 'Vetoed',
+            'DELIVERED_TO_GOV': 'Delivered to Governor',
+            'PASSED_ASSEMBLY': 'Passed Assembly',
+            'PASSED_SENATE': 'Passed Senate',
+            'SENATE_FLOOR': 'Senate Floor Calendar',
+            'ASSEMBLY_FLOOR': 'Assembly Floor Calendar',
+            'IN_SENATE_COMM': 'In Senate Committee',
+            'IN_ASSEMBLY_COMM': 'In Assembly Committee',
+            'SUBSTITUTED': 'Substituted',
+        };
+        statusLabel = typeMap[statusType] || statusDesc || null;
+    }
 
     if (statusLabel) {
         updateData.latest_status = [statusLabel];
