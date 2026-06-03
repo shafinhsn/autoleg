@@ -49,8 +49,8 @@ const OfficeApp = () => {
         <Route path="/customize" element={<Customize />} />
         <Route path="/assignments" element={<Assignments />} />
         <Route path="/clear-data" element={<ClearData />} />
-
       </Route>
+      <Route path="/office-setup" element={<OfficeSetup />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );

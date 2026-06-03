@@ -15,15 +15,15 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const joinUrl = `${appUrl || 'https://yourapp.com'}/join?code=${inviteCode}`;
+    const joinUrl = `${appUrl || 'https://yourapp.com'}/office-setup?invite_code=${inviteCode}`;
 
     const emailBody = `
 You've been invited to the Office of ${officeName}
 
-Join your team and start tracking bills by clicking the link below:
+Click the link below to join:
 ${joinUrl}
 
-Enter the invite code if needed: ${inviteCode}
+This link will automatically sign you in and add you to the office.
 
 This is an automated message, please do not reply to this email.
     `.trim();

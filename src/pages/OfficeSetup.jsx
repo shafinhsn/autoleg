@@ -74,6 +74,16 @@ export default function OfficeSetup() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Handle invite_code from URL parameter
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlInviteCode = urlParams.get('invite_code');
+    if (urlInviteCode) {
+      setInviteCode(urlInviteCode);
+      setMode('join');
+    }
+  }, []);
+
   // On mount: check if user has memberships or is creator of any office
   useEffect(() => {
     autoFixAndLoadOffices();
@@ -334,7 +344,14 @@ export default function OfficeSetup() {
         {/* JOIN */}
         {mode === 'join' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-card rounded-xl border p-8 space-y-6">
-            <h2 className="text-xl font-semibold">Join an Office</h2>
+            <h2 className="text-xl font-semibold">
+              {inviteCode ? `Join Office` : 'Join an Office'}
+            </h2>
+            {inviteCode && (
+              <p className="text-sm text-muted-foreground -mt-4">
+                You've been invited to join an office. Enter the invite code below to continue.
+              </p>
+            )}
             <div className="space-y-2">
               <Label>Invite Code</Label>
               <Input placeholder="Enter your invite code" value={inviteCode}
@@ -343,7 +360,9 @@ export default function OfficeSetup() {
             </div>
             {error && <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>}
             <div className="flex gap-3 pt-2">
-              <Button variant="outline" onClick={() => { setMode(null); setError(''); }} disabled={loading}>Back</Button>
+              {!inviteCode && (
+                <Button variant="outline" onClick={() => { setMode(null); setError(''); }} disabled={loading}>Back</Button>
+              )}
               <Button onClick={handleJoin} disabled={loading || !inviteCode.trim()} className="flex-1">
                 {loading ? 'Joining...' : 'Join Office'}
               </Button>
