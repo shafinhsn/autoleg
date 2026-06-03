@@ -282,13 +282,17 @@ export default function Assignments() {
                         {linkedBill && (
                           <span className="flex items-center gap-1">
                             📋 <strong>{linkedBill.bill_number}</strong>
-                            {linkedBill.google_drive_url && (
-                              <a href={linkedBill.google_drive_url} target="_blank" rel="noopener noreferrer"
-                                className="text-primary hover:underline flex items-center gap-0.5 ml-1">
-                                <ExternalLink className="w-3 h-3" /> Drive
-                              </a>
-                            )}
                           </span>
+                        )}
+                        {linkedBill?.google_drive_url && (
+                          <a
+                            href={linkedBill.google_drive_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs font-medium text-white bg-primary px-2 py-1 rounded hover:bg-primary/80 transition-colors"
+                          >
+                            <ExternalLink className="w-3 h-3" /> Upload to Drive
+                          </a>
                         )}
                       </div>
                     </div>
