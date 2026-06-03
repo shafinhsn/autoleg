@@ -20,8 +20,8 @@ export default function NotificationBell({ userEmail, officeId }) {
 
   useEffect(() => {
     fetchNotifications();
-    // Poll every 30 seconds for new notifications
-    const interval = setInterval(fetchNotifications, 30000);
+    // Poll every 2 minutes for new notifications
+    const interval = setInterval(fetchNotifications, 120000);
     return () => clearInterval(interval);
   }, [userEmail, officeId]);
 
