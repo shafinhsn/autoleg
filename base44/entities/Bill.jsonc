@@ -43,7 +43,7 @@
     },
     "current_procedural_status": {
       "type": "string",
-      "description": "Where the bill currently sits procedurally \u2014 set by API sync only. E.g. 'In Senate Committee', 'On Governor Desk'"
+      "description": "Where the bill currently sits procedurally \u2014 set by API sync only. Never contradicts milestones."
     },
     "milestones": {
       "type": "array",
@@ -51,6 +51,13 @@
         "type": "string"
       },
       "description": "Accumulated legislative milestones from API action history, e.g. ['Passed Assembly', 'Passed Senate']"
+    },
+    "status_notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "User-defined status annotations e.g. 'In Assembly Rules'. NEVER updated by API sync."
     },
     "pc_contact": {
       "type": "string",
@@ -117,7 +124,7 @@
       "items": {
         "type": "string"
       },
-      "description": "Office-controlled tags: priority labels, watchlist, internal tracking. NEVER updated by API sync."
+      "description": "Office-controlled priority/watchlist tags. NEVER updated by API sync."
     },
     "latest_status": {
       "type": "array",

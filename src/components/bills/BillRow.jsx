@@ -56,8 +56,9 @@ function ColorBadge({ label, colorName, onClick }) {
 }
 
 // Multi-select dropdown — renders in a portal so it never gets clipped by the table
-function MultiSelectDropdown({ anchorEl, currentValues, options, onSave, onCancel }) {
+function MultiSelectDropdown({ anchorEl, currentValues, options, onSave, onCancel, allowNew = false }) {
   const [selected, setSelected] = useState(currentValues || []);
+  const [newTag, setNewTag] = useState('');
   const [pos, setPos] = useState({ top: 0, left: 0, width: 200 });
 
   useEffect(() => {
@@ -66,12 +67,11 @@ function MultiSelectDropdown({ anchorEl, currentValues, options, onSave, onCance
       setPos({
         top: rect.bottom + window.scrollY + 4,
         left: rect.left + window.scrollX,
-        width: Math.max(rect.width, 200),
+        width: Math.max(rect.width, 220),
       });
     }
   }, [anchorEl]);
 
-  // Close on outside click
   useEffect(() => {
     function handleClick(e) {
       if (anchorEl && !anchorEl.contains(e.target)) onCancel();
@@ -84,14 +84,39 @@ function MultiSelectDropdown({ anchorEl, currentValues, options, onSave, onCance
     setSelected(prev => prev.includes(opt) ? prev.filter(s => s !== opt) : [...prev, opt]);
   }
 
+  function addNewTag() {
+    const t = newTag.trim();
+    if (t && !selected.includes(t)) {
+      setSelected(prev => [...prev, t]);
+    }
+    setNewTag('');
+  }
+
+  // All options = predefined + any custom ones already selected
+  const allOptions = [...new Set([...options, ...selected])];
+
   return createPortal(
     <div
       style={{ position: 'absolute', top: pos.top, left: pos.left, minWidth: pos.width, zIndex: 9999 }}
       className="bg-white border border-border rounded-lg shadow-xl"
       onMouseDown={e => e.stopPropagation()}
     >
+      {allowNew && (
+        <div className="p-2 border-b flex gap-1">
+          <input
+            autoFocus
+            value={newTag}
+            onChange={e => setNewTag(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addNewTag(); } }}
+            placeholder="Type a custom tag..."
+            className="flex-1 text-xs border rounded px-2 py-1 outline-none focus:border-primary"
+          />
+          <button onClick={addNewTag} className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:opacity-90">Add</button>
+        </div>
+      )}
       <div className="max-h-48 overflow-y-auto p-1">
-        {options.map(opt => (
+        {allOptions.length === 0 && <p className="text-xs text-muted-foreground px-2 py-2">No options. Type above to add.</p>}
+        {allOptions.map(opt => (
           <button key={opt} onClick={() => toggleOption(opt)}
             className={`w-full text-left px-2 py-1.5 text-xs rounded ${
               selected.includes(opt) ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
@@ -204,18 +229,42 @@ export default function BillRow({ bill, onUpdate, onDelete, isAdmin, selected, o
       </td>
       <td className="py-2 px-3 min-w-[160px]">
         <div className="flex flex-col gap-1">
-          {/* API: Current procedural status (single, read-only) */}
+          {/* API-controlled: current procedural status (read-only, never contradicts milestones) */}
           {proceduralStatus && (
             <ColorBadge label={proceduralStatus} colorName={statusItems?.find(i => i.label === proceduralStatus)?.color || DEFAULT_STATUS_COLORS[proceduralStatus] || 'Blue'} />
           )}
-          {/* API: Milestones (accumulated, read-only) */}
+          {/* API-controlled: accumulated milestones (read-only) */}
           {billMilestones.map(m => (
             <ColorBadge key={m} label={`✓ ${m}`} colorName="Green" />
           ))}
-          {/* User: editable status tags */}
-          <div ref={statusAnchorRef} onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('latest_status', ''); }} className="flex flex-wrap gap-1 cursor-pointer min-h-[16px]">
-            {!proceduralStatus && billMilestones.length === 0 && <span className="text-muted-foreground/40 text-xs">—</span>}
+          {/* User-controlled: custom status notes (editable, never overwritten by API) */}
+          <div
+            ref={statusAnchorRef}
+            onClick={e => { if (!isAdmin) return; e.preventDefault(); e.stopPropagation(); startEdit('status_notes', bill.status_notes || []); }}
+            className="flex flex-wrap gap-1 cursor-pointer min-h-[18px]"
+          >
+            {(bill.status_notes || []).map(note => (
+              <span key={note} className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border bg-violet-100 text-violet-700 border-violet-200">
+                {note}
+              </span>
+            ))}
+            {isAdmin && (!bill.status_notes || bill.status_notes.length === 0) && (
+              <span className="text-muted-foreground/30 text-[10px] italic">+ add note</span>
+            )}
+            {!proceduralStatus && billMilestones.length === 0 && (!bill.status_notes || bill.status_notes.length === 0) && (
+              <span className="text-muted-foreground/40 text-xs">—</span>
+            )}
           </div>
+          {editingField === 'status_notes' && (
+            <MultiSelectDropdown
+              anchorEl={statusAnchorRef.current}
+              currentValues={bill.status_notes || []}
+              options={statusOptions}
+              allowNew={true}
+              onSave={v => commitEdit('status_notes', v)}
+              onCancel={() => setEditingField(null)}
+            />
+          )}
         </div>
       </td>
       <td className="py-2 px-3"><EditableCell field="pc_contact" value={bill.pc_contact} /></td>

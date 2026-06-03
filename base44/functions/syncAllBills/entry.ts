@@ -125,8 +125,9 @@ async function fetchBillFromAPI(bill, apiKey) {
     }
     updateData.milestones = foundMilestones;
 
-    // CURRENT PROCEDURAL STATUS: derive from last action + statusType
-    // If the bill was substituted, follow companion bill for real status
+    // CURRENT PROCEDURAL STATUS: derive strictly from the milestones achieved + statusType.
+    // The most advanced milestone determines the procedural context, preventing contradictions
+    // like "Awaiting Assembly Action" when "Passed Assembly" is already a milestone.
     const substitutedBy = result.substitutedBy;
     if (substitutedBy?.basePrintNo) {
         const compBillNo = substitutedBy.basePrintNo;
@@ -147,46 +148,51 @@ async function fetchBillFromAPI(bill, apiKey) {
         }
         updateData.current_procedural_status = compStatus || 'Substituted';
     } else {
-        // Use latest action text to determine current procedural position
+        const statusType = result.status?.statusType || '';
+        const committeeName = result.status?.committeeName || '';
+
+        // Terminal states from action history take highest priority
         const reversedActions = [...actions].reverse();
-
-        // Check for terminal statuses first
         let proceduralStatus = null;
-        const proceduralChecks = [
-            { test: (t) => t.includes('SIGNED CHAP') || t.includes('APPROVED BY GOV') || t.includes('CHAPTERED'), label: 'Signed into Law' },
-            { test: (t) => t.includes('VETOED') || t.includes('POCKET VETO'), label: 'Vetoed' },
-            { test: (t) => t.includes('DELIVERED TO GOV'), label: 'On Governor\'s Desk' },
-        ];
-        for (const check of proceduralChecks) {
-            if (reversedActions.some(a => check.test((a.text || '').toUpperCase()))) {
-                proceduralStatus = check.label;
-                break;
-            }
-        }
 
-        if (!proceduralStatus) {
-            // Use the committee + statusType to determine current location
-            const statusType = result.status?.statusType || '';
-            const committeeName = result.status?.committeeName || '';
+        if (reversedActions.some(a => { const t = (a.text||'').toUpperCase(); return t.includes('SIGNED CHAP') || t.includes('APPROVED BY GOV') || t.includes('CHAPTERED'); })) {
+            proceduralStatus = 'Signed into Law';
+        } else if (reversedActions.some(a => { const t = (a.text||'').toUpperCase(); return t.includes('VETOED') || t.includes('POCKET VETO'); })) {
+            proceduralStatus = 'Vetoed';
+        } else if (reversedActions.some(a => (a.text||'').toUpperCase().includes('DELIVERED TO GOV'))) {
+            proceduralStatus = 'On Governor\'s Desk';
+        } else {
+            // Use milestones to prevent contradictions:
+            // If both chambers passed, it must be going to Governor or is done
+            const passedAssembly = foundMilestones.includes('Passed Assembly');
+            const passedSenate = foundMilestones.includes('Passed Senate');
 
-            if (statusType === 'IN_SENATE_COMM' || statusType === 'SENATE_FLOOR') {
+            if (passedAssembly && passedSenate) {
+                // Both passed — heading to governor (or waiting for enrollment)
+                proceduralStatus = 'Passed Both Chambers — Awaiting Governor';
+            } else if (passedAssembly && !passedSenate) {
+                // Passed Assembly, now in Senate
                 proceduralStatus = committeeName
-                    ? `In Senate ${committeeName} Committee`
-                    : (statusType === 'SENATE_FLOOR' ? 'Senate Floor Calendar' : 'In Senate Committee');
-            } else if (statusType === 'IN_ASSEMBLY_COMM' || statusType === 'ASSEMBLY_FLOOR') {
+                    ? `Passed Assembly — In Senate ${committeeName} Committee`
+                    : 'Passed Assembly — In Senate';
+            } else if (passedSenate && !passedAssembly) {
+                // Passed Senate, now in Assembly
                 proceduralStatus = committeeName
-                    ? `In Assembly ${committeeName} Committee`
-                    : (statusType === 'ASSEMBLY_FLOOR' ? 'Assembly Floor Calendar' : 'In Assembly Committee');
-            } else if (statusType === 'PASSED_ASSEMBLY') {
-                proceduralStatus = committeeName
-                    ? `Passed Assembly — In Senate ${committeeName}`
-                    : 'Passed Assembly — Awaiting Senate Action';
-            } else if (statusType === 'PASSED_SENATE') {
-                proceduralStatus = committeeName
-                    ? `Passed Senate — In Assembly ${committeeName}`
-                    : 'Passed Senate — Awaiting Assembly Action';
+                    ? `Passed Senate — In Assembly ${committeeName} Committee`
+                    : 'Passed Senate — In Assembly';
             } else {
-                proceduralStatus = PROCEDURAL_STATUS_MAP[statusType] || result.status?.statusDesc || null;
+                // Bill hasn't passed either chamber yet — use statusType + committee
+                if (statusType === 'IN_SENATE_COMM' || statusType === 'SENATE_FLOOR') {
+                    proceduralStatus = committeeName
+                        ? `In Senate ${committeeName} Committee`
+                        : (statusType === 'SENATE_FLOOR' ? 'Senate Floor Calendar' : 'In Senate Committee');
+                } else if (statusType === 'IN_ASSEMBLY_COMM' || statusType === 'ASSEMBLY_FLOOR') {
+                    proceduralStatus = committeeName
+                        ? `In Assembly ${committeeName} Committee`
+                        : (statusType === 'ASSEMBLY_FLOOR' ? 'Assembly Floor Calendar' : 'In Assembly Committee');
+                } else {
+                    proceduralStatus = PROCEDURAL_STATUS_MAP[statusType] || result.status?.statusDesc || null;
+                }
             }
         }
 
