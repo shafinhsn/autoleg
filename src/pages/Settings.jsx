@@ -62,6 +62,17 @@ export default function Settings() {
 
   async function handleLeaveOffice() {
     if (!confirm('Leave this office? You will need to rejoin or create a new one.')) return;
+    
+    // Delete the membership so you're not auto-logged back in
+    const memberships = await base44.entities.Membership.filter({
+      user_id: user.id,
+      office_id: office.id,
+    });
+    
+    if (memberships.length > 0) {
+      await base44.entities.Membership.delete(memberships[0].id);
+    }
+    
     await base44.auth.updateMe({ active_office_id: null });
     window.location.replace('/office-setup');
   }
