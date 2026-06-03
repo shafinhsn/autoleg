@@ -88,19 +88,20 @@ export default function OfficeSetup() {
 
   async function autoFixAndLoadOffices() {
     setLoadingOffices(true);
+    setError('');
     try {
       const user = await base44.auth.me();
       console.log('[OfficeSetup] User:', user);
       console.log('[OfficeSetup] Active office ID:', user.active_office_id);
 
       if (user.active_office_id) {
-        window.location.replace(window.location.pathname);
+        console.log('[OfficeSetup] User has active office, redirecting to app');
+        window.location.replace('/');
         return;
       }
 
       const userMemberships = await base44.entities.Membership.filter({ user_id: user.id });
       console.log('[OfficeSetup] Memberships found:', userMemberships.length);
-      console.log('[OfficeSetup] Memberships:', userMemberships);
       
       const officeIds = userMemberships.map(m => m.office_id);
       console.log('[OfficeSetup] Office IDs:', officeIds);
@@ -112,23 +113,26 @@ export default function OfficeSetup() {
       }
       
       console.log('[OfficeSetup] Offices found:', userOffices.length);
-      console.log('[OfficeSetup] Offices:', userOffices);
 
       if (userOffices.length === 1) {
         const office = userOffices[0];
+        console.log('[OfficeSetup] Single office found, auto-selecting:', office.name);
         await base44.auth.updateMe({ active_office_id: office.id });
         window.location.replace('/');
         return;
       }
 
       if (userOffices.length > 1) {
+        console.log('[OfficeSetup] Multiple offices found, showing selection');
         setOffices(userOffices);
         setMode('select');
       } else {
+        console.log('[OfficeSetup] No offices found, showing main menu');
         setMode(null);
       }
     } catch (e) {
       console.error('[OfficeSetup] Auto-fix check failed:', e);
+      setError('Failed to load offices. Please try again.');
       setMode(null);
     } finally {
       setLoadingOffices(false);
@@ -243,8 +247,15 @@ export default function OfficeSetup() {
 
   if (loadingOffices) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" />
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center space-y-4"
+        >
+          <div className="w-12 h-12 border-4 border-muted border-t-primary rounded-full animate-spin mx-auto" />
+          <p className="text-muted-foreground">Loading your offices...</p>
+        </motion.div>
       </div>
     );
   }
@@ -261,7 +272,7 @@ export default function OfficeSetup() {
         </div>
 
         {mode === 'select' && (
-          <SelectOfficesView offices={offices} onSelect={handleSelectOffice} loading={loading} error={error} onBack={() => setMode(null)} />
+          <SelectOfficesView offices={offices} onSelect={handleSelectOffice} loading={loading} error={error} onBack={() => { setMode(null); setError(''); }} />
         )}
 
         {mode === null && (
@@ -292,18 +303,20 @@ export default function OfficeSetup() {
               </div>
             </button>
 
-            <button onClick={autoFixAndLoadOffices} className="w-full p-6 rounded-xl border-2 border-border bg-card hover:border-primary/50 transition-all text-left group">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-muted/10 flex items-center justify-center group-hover:bg-muted/20 transition-colors">
-                  <Building2 className="w-6 h-6 text-muted-foreground" />
+            {offices.length > 0 && (
+              <button onClick={autoFixAndLoadOffices} className="w-full p-6 rounded-xl border-2 border-border bg-card hover:border-primary/50 transition-all text-left group">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-muted/10 flex items-center justify-center group-hover:bg-muted/20 transition-colors">
+                    <Building2 className="w-6 h-6 text-muted-foreground" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold">View My Offices</h3>
+                    <p className="text-sm text-muted-foreground">See offices you're already a member of</p>
+                  </div>
+                  <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold">View My Offices</h3>
-                  <p className="text-sm text-muted-foreground">See offices you're already a member of</p>
-                </div>
-                <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-              </div>
-            </button>
+              </button>
+            )}
           </div>
         )}
 

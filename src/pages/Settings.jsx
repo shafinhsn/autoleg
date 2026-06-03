@@ -61,19 +61,11 @@ export default function Settings() {
   }
 
   async function handleLeaveOffice() {
-    if (!confirm('Leave this office? You will need to rejoin or create a new one.')) return;
+    if (!confirm('Leave this office? You will return to the office selection screen.')) return;
     
-    // Delete the membership so you're not auto-logged back in
-    const memberships = await base44.entities.Membership.filter({
-      user_id: user.id,
-      office_id: office.id,
-    });
-    
-    if (memberships.length > 0) {
-      await base44.entities.Membership.delete(memberships[0].id);
-    }
-    
+    // Just clear active office - keep membership so user can return
     await base44.auth.updateMe({ active_office_id: null });
+    console.log('[Settings] Cleared active_office_id for user:', user.id);
     window.location.replace('/office-setup');
   }
 
@@ -405,15 +397,18 @@ export default function Settings() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2"><LogOut className="w-4 h-4" /> Switch Office</CardTitle>
-          <CardDescription>Leave this office and join or create a different one</CardDescription>
+          <CardTitle className="text-base flex items-center gap-2"><LogOut className="w-4 h-4" /> Account Actions</CardTitle>
+          <CardDescription>Switch offices or log out of your account</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Button variant="outline" className="w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground" onClick={handleLeaveOffice}>
+          <Button variant="outline" className="w-full" onClick={handleLeaveOffice}>
             Leave This Office
           </Button>
-          <Button variant="outline" className="w-full" onClick={() => base44.auth.logout()}>
-            Log Out (Switch Account)
+          <Button variant="outline" className="w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground" onClick={() => {
+            console.log('[Settings] User logging out:', user.id);
+            base44.auth.logout();
+          }}>
+            Log Out
           </Button>
         </CardContent>
       </Card>
