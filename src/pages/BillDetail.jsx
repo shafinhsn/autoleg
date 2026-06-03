@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useOffice } from '@/hooks/useOffice';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, Save, MessageSquare } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Save, MessageSquare, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,6 +12,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import MultiTagSelect from '@/components/bills/MultiTagSelect';
 import { syncBill } from '@/lib/syncBill';
+import CommentsList from '@/components/bills/CommentsList';
+import ChangeLog from '@/components/bills/ChangeLog';
 
 export default function BillDetail() {
   const pathParts = window.location.pathname.split('/');
@@ -24,6 +26,12 @@ export default function BillDetail() {
   const [draftTags, setDraftTags] = useState([]);
   const [syncing, setSyncing] = useState(false);
   const [newComment, setNewComment] = useState('');
+  const [currentUser, setCurrentUser] = useState(null);
+
+  // Load current user for comment ownership
+  useState(() => {
+    base44.auth.me().then(setCurrentUser).catch(() => {});
+  });
 
   const { data: bill, isLoading } = useQuery({
     queryKey: ['bill', billId],
@@ -66,7 +74,22 @@ export default function BillDetail() {
   }
 
   async function handleSave() {
+    // Find changed fields and log them
+    const changedFields = Object.keys(draft).filter(k => (draft[k] || '') !== (bill[k] || ''));
     await base44.entities.Bill.update(bill.id, { ...draft, tags: draftTags });
+
+    if (changedFields.length > 0) {
+      const user = currentUser || await base44.auth.me();
+      await base44.entities.BillChangeLog.create({
+        bill_id: billId,
+        office_id: office?.id,
+        event_type: 'manual_edit',
+        description: `Edited: ${changedFields.join(', ')}`,
+        changed_by: user?.full_name || user?.email || 'Staff',
+      });
+      qc.invalidateQueries({ queryKey: ['changelog', billId] });
+    }
+
     qc.invalidateQueries({ queryKey: ['bill', billId] });
     qc.invalidateQueries({ queryKey: ['bills', office?.id] });
     setEditing(false);
@@ -78,6 +101,24 @@ export default function BillDetail() {
     const updateData = await syncBill(bill, apiKey);
     if (updateData) {
       await base44.entities.Bill.update(bill.id, updateData);
+
+      // Log what changed from the sync
+      const changedKeys = Object.keys(updateData).filter(k => {
+        const oldVal = JSON.stringify(bill[k] || '');
+        const newVal = JSON.stringify(updateData[k] || '');
+        return oldVal !== newVal;
+      });
+      const description = changedKeys.length > 0
+        ? `Synced from API. Updated: ${changedKeys.join(', ')}`
+        : 'Synced from API. No changes detected.';
+      await base44.entities.BillChangeLog.create({
+        bill_id: billId,
+        office_id: office?.id,
+        event_type: 'api_sync',
+        description,
+        changed_by: 'API Sync',
+      });
+      qc.invalidateQueries({ queryKey: ['changelog', billId] });
     } else {
       console.warn(`Sync returned no updates for ${bill.bill_number}`);
     }
@@ -88,7 +129,7 @@ export default function BillDetail() {
 
   async function handleAddComment() {
     if (!newComment.trim()) return;
-    const user = await base44.auth.me();
+    const user = currentUser || await base44.auth.me();
     await base44.entities.Comment.create({
       bill_id: billId,
       office_id: office?.id,
@@ -176,6 +217,7 @@ export default function BillDetail() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="comments"><MessageSquare className="w-3.5 h-3.5 mr-1" /> Comments ({comments.length})</TabsTrigger>
+          <TabsTrigger value="changelog"><History className="w-3.5 h-3.5 mr-1" /> Change Log</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
@@ -221,18 +263,21 @@ export default function BillDetail() {
                 />
                 <Button size="sm" onClick={handleAddComment} className="self-end">Post</Button>
               </div>
-              <div className="space-y-3">
-                {comments.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No comments yet</p>}
-                {comments.map(c => (
-                  <div key={c.id} className="p-3 rounded-lg bg-muted/50">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-medium">{c.author_name || 'Staff'}</span>
-                      <span className="text-[10px] text-muted-foreground">{new Date(c.created_date).toLocaleDateString()}</span>
-                    </div>
-                    <p className="text-sm">{c.text}</p>
-                  </div>
-                ))}
-              </div>
+              <CommentsList
+                comments={comments}
+                billId={billId}
+                officeId={office?.id}
+                currentUser={currentUser}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="changelog" className="mt-4">
+          <Card>
+            <CardHeader><CardTitle className="text-base">Activity & Change Log</CardTitle></CardHeader>
+            <CardContent className="p-6">
+              <ChangeLog billId={billId} />
             </CardContent>
           </Card>
         </TabsContent>

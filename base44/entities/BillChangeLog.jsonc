@@ -1,0 +1,52 @@
+{
+  "name": "BillChangeLog",
+  "type": "object",
+  "properties": {
+    "bill_id": {
+      "type": "string",
+      "description": "ID of the bill this log entry belongs to"
+    },
+    "office_id": {
+      "type": "string",
+      "description": "ID of the office"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "manual_edit",
+        "api_sync",
+        "status_update",
+        "milestone_added",
+        "field_change",
+        "comment_added"
+      ],
+      "description": "Type of change event"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable summary of what changed"
+    },
+    "changed_by": {
+      "type": "string",
+      "description": "Name or email of who made the change, or 'API Sync' for automated updates"
+    },
+    "field_name": {
+      "type": "string",
+      "description": "Field that changed (optional)"
+    },
+    "old_value": {
+      "type": "string",
+      "description": "Previous value (optional)"
+    },
+    "new_value": {
+      "type": "string",
+      "description": "New value (optional)"
+    }
+  },
+  "required": [
+    "bill_id",
+    "office_id",
+    "event_type",
+    "description"
+  ]
+}
