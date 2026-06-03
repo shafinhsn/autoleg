@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useOffice } from '@/hooks/useOffice';
-import { Save, Key, Building2, Trash2 } from 'lucide-react';
+import { Save, Key, Building2, Trash2, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -38,13 +38,30 @@ export default function Settings() {
     setTimeout(() => setSaved(false), 2000);
   }
 
+  async function handleLeaveOffice() {
+    if (!confirm('Leave this office? You will need to rejoin or create a new one.')) return;
+    await base44.auth.updateMe({ office_id: null });
+    window.location.reload();
+  }
+
   if (!isAdmin) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold">Settings</h1>
         <Card>
-          <CardContent className="py-16 text-center">
+          <CardContent className="py-16 text-center space-y-4">
             <p className="text-muted-foreground">Only admins and directors can manage settings.</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2"><LogOut className="w-4 h-4" /> Switch Office</CardTitle>
+            <CardDescription>Leave this office and join or create a different one</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" className="w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground" onClick={handleLeaveOffice}>
+              Leave This Office
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -130,6 +147,18 @@ export default function Settings() {
       <Button onClick={handleSave} disabled={saving} className="w-full">
         <Save className="w-4 h-4 mr-1.5" /> {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Settings'}
       </Button>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2"><LogOut className="w-4 h-4" /> Switch Office</CardTitle>
+          <CardDescription>Leave this office and join or create a different one</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" className="w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground" onClick={handleLeaveOffice}>
+            Leave This Office
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

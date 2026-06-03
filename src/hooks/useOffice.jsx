@@ -20,7 +20,13 @@ export function OfficeProvider({ children }) {
     queryFn: async () => {
       if (!user?.office_id) return null;
       const offices = await base44.entities.Office.filter({ id: user.office_id });
-      return offices[0] || null;
+      const found = offices[0] || null;
+      // Auto-fix: if this user is the office owner but doesn't have admin role, grant it now
+      if (found && found.owner_email === user.email && user.role !== 'admin' && user.role !== 'legislative_director') {
+        await base44.auth.updateMe({ role: 'admin' });
+        window.location.reload();
+      }
+      return found;
     },
     enabled: !!user?.office_id,
   });
