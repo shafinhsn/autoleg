@@ -134,13 +134,42 @@ async function fetchBillFromAPI(bill, apiKey) {
         const compSession = substitutedBy.session || 2025;
         let compStatus = null;
         try {
-            const compUrl = `https://legislation.nysenate.gov/api/3/bills/${compSession}/${compBillNo}?key=${key}`;
+            const compUrl = `https://legislation.nysenate.gov/api/3/bills/${compSession}/${compBillNo}?key=${key}&view=with_refs`;
             const compResp = await fetch(compUrl);
             if (compResp.ok) {
                 const compData = await compResp.json();
-                const cs = compData?.result?.status;
-                if (cs) {
-                    compStatus = PROCEDURAL_STATUS_MAP[cs.statusType] || cs.statusDesc || null;
+                const compResult = compData?.result;
+                if (compResult) {
+                    // Run the same milestone-aware logic on the companion bill
+                    const compActions = compResult.actions?.items || [];
+                    const compActionTexts = compActions.map(a => (a.text || '').toUpperCase());
+                    const compMilestones = [];
+                    for (const m of MILESTONE_TESTS) {
+                        if (compActionTexts.some(t => m.test(t))) compMilestones.push(m.label);
+                    }
+                    const compPassedAssembly = compMilestones.includes('Passed Assembly');
+                    const compPassedSenate = compMilestones.includes('Passed Senate');
+                    const compReversed = [...compActions].reverse();
+                    if (compReversed.some(a => { const t = (a.text||'').toUpperCase(); return t.includes('SIGNED CHAP') || t.includes('APPROVED BY GOV') || t.includes('CHAPTERED'); })) {
+                        compStatus = 'Signed into Law';
+                    } else if (compReversed.some(a => { const t = (a.text||'').toUpperCase(); return t.includes('VETOED') || t.includes('POCKET VETO'); })) {
+                        compStatus = 'Vetoed';
+                    } else if (compReversed.some(a => (a.text||'').toUpperCase().includes('DELIVERED TO GOV'))) {
+                        compStatus = "On Governor's Desk";
+                    } else if (compPassedAssembly && compPassedSenate) {
+                        compStatus = 'Passed Both Chambers — Awaiting Governor';
+                    } else if (compPassedAssembly && !compPassedSenate) {
+                        const compCommittee = compResult.status?.committeeName;
+                        compStatus = compCommittee ? `Passed Assembly — In Senate ${compCommittee} Committee` : 'Passed Assembly — In Senate';
+                    } else if (compPassedSenate && !compPassedAssembly) {
+                        const compCommittee = compResult.status?.committeeName;
+                        compStatus = compCommittee ? `Passed Senate — In Assembly ${compCommittee} Committee` : 'Passed Senate — In Assembly';
+                    } else {
+                        const cs = compResult.status;
+                        compStatus = PROCEDURAL_STATUS_MAP[cs?.statusType] || cs?.statusDesc || null;
+                    }
+                    // Also update milestones from companion
+                    updateData.milestones = compMilestones;
                 }
             }
         } catch (e) {
